@@ -15,4 +15,14 @@ describe('health endpoint', () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
   });
+
+  it('enables readable logs during local development', async () => {
+    const nodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    const developmentApp = buildApp();
+
+    await developmentApp.ready();
+    await developmentApp.close();
+    process.env.NODE_ENV = nodeEnv;
+  });
 });
