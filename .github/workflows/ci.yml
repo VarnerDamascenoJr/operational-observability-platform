@@ -13,7 +13,7 @@ jobs:
   quality:
     name: Lint, test and build
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -29,3 +29,20 @@ jobs:
 
       - name: Run quality checks
         run: npm run check
+
+      - name: Validate observability configuration
+        run: npm run validate:observability
+
+      - name: Start observability stack
+        run: docker compose up -d --wait
+
+      - name: Run observability smoke test
+        run: npm run smoke:observability
+
+      - name: Print service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Stop observability stack
+        if: always()
+        run: docker compose down --volumes

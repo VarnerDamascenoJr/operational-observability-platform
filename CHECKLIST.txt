@@ -21,14 +21,14 @@ Como usar
 
 2. Stack de telemetria local
 -----------------------------
-[ ] Adicionar OpenTelemetry Collector ao Docker Compose.
-[ ] Adicionar Prometheus ao Docker Compose.
-[ ] Adicionar Grafana Tempo ao Docker Compose.
-[ ] Adicionar Loki ao Docker Compose.
-[ ] Adicionar Grafana ao Docker Compose.
-[ ] Criar arquivos de configuracao para cada servico.
-[ ] Provisionar uma fonte de dados inicial no Grafana.
-[ ] Documentar URLs, credenciais locais e comandos de inicializacao.
+[x] Adicionar OpenTelemetry Collector ao Docker Compose.
+[x] Adicionar Prometheus ao Docker Compose.
+[x] Adicionar Grafana Tempo ao Docker Compose.
+[x] Adicionar Loki ao Docker Compose.
+[x] Adicionar Grafana ao Docker Compose.
+[x] Criar arquivos de configuracao para cada servico.
+[x] Provisionar uma fonte de dados inicial no Grafana.
+[x] Documentar URLs, credenciais locais e comandos de inicializacao.
 
 3. Aplicacao geradora de telemetria
 -----------------------------------
