@@ -10,7 +10,8 @@ pelo OpenTelemetry Collector e armazenada em Prometheus, Tempo e Loki.
 
 - Node.js 22, TypeScript e Fastify
 - PostgreSQL para configuracao e estado operacional
-- Docker Compose para ambiente local
+- OpenTelemetry Collector, Prometheus, Tempo, Loki e Grafana
+- Docker Compose para ambiente local e reproduzivel
 - ESLint, Prettier e Vitest
 
 ## Executar localmente
@@ -18,11 +19,45 @@ pelo OpenTelemetry Collector e armazenada em Prometheus, Tempo e Loki.
 ```bash
 cp .env.example .env
 npm install
-docker compose up -d postgres
+docker compose up -d
 npm run dev
 ```
 
 Verifique a API em `GET http://localhost:3000/health`.
+
+## Observabilidade local
+
+| Componente          | URL                     | Uso                              |
+| ------------------- | ----------------------- | -------------------------------- |
+| Grafana             | http://localhost:3001   | Explore, dashboards e correlacao |
+| Prometheus          | http://localhost:9090   | Metricas e regras de alerta      |
+| Tempo               | http://localhost:3200   | Traces distribuidos              |
+| Loki                | http://localhost:3100   | Logs estruturados                |
+| Collector OTLP gRPC | `localhost:4317`        | Ingestao de telemetria           |
+| Collector OTLP HTTP | `http://localhost:4318` | Ingestao de telemetria           |
+
+O login local do Grafana e `admin` / `admin`. Essas credenciais sao somente
+para desenvolvimento local. Todas as portas sao vinculadas a `127.0.0.1` e nao
+ficam acessiveis por outras maquinas da rede.
+
+O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki. O
+Collector recebe dados OTLP e encaminha traces para o Tempo, metricas para o
+Prometheus e logs para o Loki. A retencao local de traces, logs e metricas e de
+24 horas.
+
+Para acompanhar a inicializacao:
+
+```bash
+docker compose ps
+docker compose logs -f otel-collector prometheus tempo loki grafana
+npm run validate:observability
+npm run smoke:observability
+```
+
+`validate:observability` verifica as configuracoes do Compose, Collector e
+Prometheus. `smoke:observability` verifica ingestao OTLP, persistencia de trace
+no Tempo, persistencia de log correlacionado no Loki, scrape do Collector pelo
+Prometheus e provisionamento das fontes no Grafana.
 
 ## Qualidade
 
@@ -41,5 +76,5 @@ validar a API compilada e em execucao, incluindo o fluxo HTTP real.
 
 ## Proximo marco
 
-Adicionar OpenTelemetry Collector, Prometheus, Tempo, Loki e Grafana ao ambiente
-local e instrumentar uma API de demonstracao para produzir telemetria correlacionada.
+Instrumentar uma API de demonstracao para produzir metricas, logs e traces
+correlacionados para esta stack.

@@ -20,7 +20,9 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "npm run build && playwright test",
     "test:all": "npm run test:unit && npm run test:e2e",
-    "check": "npm run lint && npm run format && npm run test:all && npm run build"
+    "check": "npm run lint && npm run format && npm run test:all && npm run build",
+    "validate:observability": "bash scripts/validate-observability.sh",
+    "smoke:observability": "bash scripts/smoke-observability.sh"
   },
   "dependencies": {
     "@fastify/helmet": "^13.0.1",
