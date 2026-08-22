@@ -1,0 +1,114 @@
+Operational Observability Platform - Checklist
+================================================
+
+Como usar
+----------
+- Marque cada item concluido com [x].
+- Use CHECKLIST.local.txt para notas pessoais, links e descobertas locais.
+- CHECKLIST.local.txt e ignorado pelo Git; CHECKLIST.txt registra o plano comum.
+
+1. Fundacao do projeto
+----------------------
+[x] Criar repositorio Git e branch main.
+[x] Configurar Node.js, TypeScript e Fastify.
+[x] Configurar lint, formatacao, testes e build.
+[x] Criar endpoint GET /health.
+[x] Adicionar PostgreSQL ao ambiente local.
+[x] Publicar o commit inicial no GitHub.
+[ ] Configurar GitHub Actions para lint, testes e build.
+[ ] Criar a primeira migration e a camada de acesso ao PostgreSQL.
+[ ] Definir convencoes para IDs de correlacao e logs estruturados.
+
+2. Stack de telemetria local
+-----------------------------
+[ ] Adicionar OpenTelemetry Collector ao Docker Compose.
+[ ] Adicionar Prometheus ao Docker Compose.
+[ ] Adicionar Grafana Tempo ao Docker Compose.
+[ ] Adicionar Loki ao Docker Compose.
+[ ] Adicionar Grafana ao Docker Compose.
+[ ] Criar arquivos de configuracao para cada servico.
+[ ] Provisionar uma fonte de dados inicial no Grafana.
+[ ] Documentar URLs, credenciais locais e comandos de inicializacao.
+
+3. Aplicacao geradora de telemetria
+-----------------------------------
+[ ] Criar uma API de demonstracao separada ou um modulo de simulacao.
+[ ] Instrumentar requests HTTP com OpenTelemetry.
+[ ] Exportar metricas RED: taxa, erros e duracao.
+[ ] Exportar traces para o Collector.
+[ ] Emitir logs JSON com trace_id, request_id e transaction_id.
+[ ] Criar um fluxo assincrono demonstravel.
+[ ] Simular uma integracao externa lenta ou indisponivel.
+[ ] Validar navegacao de uma requisicao entre trace, metrica e log.
+
+4. Dashboards e correlacao
+--------------------------
+[ ] Criar dashboard tecnico por servico: throughput, erros e latencia.
+[ ] Criar dashboard de negocio: transacoes, sucesso e falhas.
+[ ] Criar filtros por tenant, servico, ambiente e periodo.
+[ ] Criar links do dashboard para traces no Tempo.
+[ ] Criar links de traces para logs no Loki.
+[ ] Documentar o modelo de correlacao entre request, evento e transacao.
+
+5. SLOs e error budget
+-----------------------
+[ ] Modelar projetos, servicos, indicadores e objetivos no PostgreSQL.
+[ ] Criar API para cadastrar e consultar SLOs.
+[ ] Calcular disponibilidade e SLI de latencia.
+[ ] Calcular consumo e saldo de error budget.
+[ ] Exibir o estado do SLO em dashboard ou endpoint.
+[ ] Cobrir os calculos com testes unitarios.
+
+6. Alertas baseados em sintomas
+--------------------------------
+[ ] Configurar regras de alerta no Prometheus.
+[ ] Configurar roteamento de alertas no Alertmanager.
+[ ] Criar alerta de aumento de erros.
+[ ] Criar alerta de degradacao de latencia.
+[ ] Criar alerta de consumo acelerado de error budget.
+[ ] Criar alerta de queda de transacoes bem-sucedidas.
+[ ] Registrar alertas e seus estados na API da plataforma.
+[ ] Evitar alertas duplicados para o mesmo sintoma.
+
+7. Incidentes e investigacao guiada
+-----------------------------------
+[ ] Modelar incidentes, evidencias, hipoteses e linha do tempo.
+[ ] Criar API para abrir, atualizar e encerrar incidentes.
+[ ] Associar incidentes a alertas, servicos e SLOs afetados.
+[ ] Sugerir traces e logs relevantes para cada sintoma.
+[ ] Criar runbooks para erro alto, latencia alta e dependencia indisponivel.
+[ ] Registrar causa raiz e acoes preventivas apos um incidente.
+
+8. Sampling e resiliencia
+-------------------------
+[ ] Definir regras de sampling no OpenTelemetry Collector.
+[ ] Manter 100% dos traces com erro.
+[ ] Manter 100% dos traces lentos.
+[ ] Amostrar trafego saudavel para controlar custo.
+[ ] Criar API para consultar e alterar regras de sampling.
+[ ] Testar indisponibilidade temporaria do Collector.
+[ ] Testar indisponibilidade do PostgreSQL e comportamento esperado.
+[ ] Medir perda, atraso e capacidade de recuperacao de telemetria.
+
+9. Integracao com sales-event-project
+--------------------------------------
+[ ] Instrumentar a API Go com OpenTelemetry.
+[ ] Instrumentar o worker Go com OpenTelemetry.
+[ ] Propagar contexto por eventos do RabbitMQ.
+[ ] Correlacionar venda, pagamento, outbox, ticket e email.
+[ ] Criar dashboard da jornada de uma venda.
+[ ] Simular confirmacao duplicada de pagamento.
+[ ] Simular falha no consumidor ou atraso na fila.
+[ ] Simular falha persistente no envio de email.
+[ ] Investigar cada cenario na plataforma de observabilidade.
+
+10. Entrega de portfolio
+------------------------
+[ ] Criar diagramas de arquitetura e fluxo de dados.
+[ ] Registrar ADRs para as decisoes tecnicas principais.
+[ ] Adicionar Terraform para a infraestrutura proposta na AWS.
+[ ] Criar pipeline de deploy e validacoes no GitHub Actions.
+[ ] Definir estrategia de canary e rollback.
+[ ] Escrever runbook de operacao local e em producao.
+[ ] Gravar ou documentar um roteiro de demonstracao de incidente.
+[ ] Revisar README para que o projeto possa ser executado por outra pessoa.
