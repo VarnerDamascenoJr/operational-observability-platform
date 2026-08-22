@@ -15,7 +15,7 @@ Como usar
 [x] Criar endpoint GET /health.
 [x] Adicionar PostgreSQL ao ambiente local.
 [x] Publicar o commit inicial no GitHub.
-[ ] Configurar GitHub Actions para lint, testes e build.
+[x] Configurar GitHub Actions para lint, testes e build.
 [ ] Criar a primeira migration e a camada de acesso ao PostgreSQL.
 [ ] Definir convencoes para IDs de correlacao e logs estruturados.
 
