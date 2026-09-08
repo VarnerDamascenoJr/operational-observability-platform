@@ -20,10 +20,27 @@ pelo OpenTelemetry Collector e armazenada em Prometheus, Tempo e Loki.
 cp .env.example .env
 npm install
 docker compose up -d
+npm run db:migrate
 npm run dev
 ```
 
 Verifique a API em `GET http://localhost:3000/health`.
+
+Cada resposta HTTP inclui `x-request-id` e `x-transaction-id`. Valores validos
+recebidos nesses headers sao propagados; valores ausentes ou inseguros sao
+substituidos por UUIDs. Consulte `docs/correlation.md` para o contrato completo
+de IDs e logs estruturados.
+
+## Banco de dados
+
+As migrations SQL ficam em `migrations/` e seguem o formato
+`NNNN_descricao.sql`. Execute `npm run db:migrate` depois de iniciar o
+PostgreSQL. O executor aplica cada migration em uma transacao, impede execucoes
+concorrentes e recusa alteracoes em arquivos que ja tenham sido aplicados.
+
+A primeira migration cria o schema `control_plane`, reservado para as futuras
+configuracoes e o estado operacional da plataforma. As migrations aplicadas
+sao registradas em `public.schema_migrations`.
 
 ## Observabilidade local
 

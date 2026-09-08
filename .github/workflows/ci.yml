@@ -36,6 +36,11 @@ jobs:
       - name: Start observability stack
         run: docker compose up -d --wait
 
+      - name: Apply database migrations
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: postgresql://observability:observability@localhost:5432/observability
+
       - name: Run observability smoke test
         run: npm run smoke:observability
 

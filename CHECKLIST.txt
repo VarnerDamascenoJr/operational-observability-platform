@@ -16,8 +16,8 @@ Como usar
 [x] Adicionar PostgreSQL ao ambiente local.
 [x] Publicar o commit inicial no GitHub.
 [x] Configurar GitHub Actions para lint, testes e build.
-[ ] Criar a primeira migration e a camada de acesso ao PostgreSQL.
-[ ] Definir convencoes para IDs de correlacao e logs estruturados.
+[x] Criar a primeira migration e a camada de acesso ao PostgreSQL.
+[x] Definir convencoes para IDs de correlacao e logs estruturados.
 
 2. Stack de telemetria local
 -----------------------------
