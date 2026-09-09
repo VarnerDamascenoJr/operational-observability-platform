@@ -6,6 +6,13 @@ alertas, regras de sampling, correlacao e investigacao de incidentes.
 O projeto atua como plano de controle. A coleta pesada de telemetria sera feita
 pelo OpenTelemetry Collector e armazenada em Prometheus, Tempo e Loki.
 
+## Convencoes de correlacao
+
+Este projeto adota as convencoes compartilhadas do portfolio para
+`X-Request-ID`, `X-Correlation-ID`, `X-Transaction-ID`, logs, traces, metricas e
+investigacao. A fonte de verdade esta no documento
+[`portfolio-correlation-conventions.md`](https://github.com/VarnerDamascenoJr/OptiFlow/blob/main/docs/portfolio-correlation-conventions.md).
+
 ## Stack inicial
 
 - Node.js 22, TypeScript e Fastify
