@@ -4,6 +4,7 @@ import Fastify, { LogController } from 'fastify';
 import type { Writable } from 'node:stream';
 
 import {
+  correlationIdHeader,
   getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
@@ -11,6 +12,7 @@ import {
 
 declare module 'fastify' {
   interface FastifyRequest {
+    correlationId: string;
     transactionId: string;
   }
 }
@@ -42,6 +44,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       return logger.child(
         {
           ...bindings,
+          correlation_id: context.correlationId,
           transaction_id: context.transactionId,
         },
         childLoggerOptions,
@@ -51,12 +54,15 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   void app.register(helmet);
   void app.register(sensible);
+  app.decorateRequest('correlationId', '');
   app.decorateRequest('transactionId', '');
 
   app.addHook('onRequest', async (request, reply) => {
     const context = getCorrelationContext(request.raw);
+    request.correlationId = context.correlationId;
     request.transactionId = context.transactionId;
     void reply.header(requestIdHeader, context.requestId);
+    void reply.header(correlationIdHeader, context.correlationId);
     void reply.header(transactionIdHeader, context.transactionId);
   });
 
