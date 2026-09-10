@@ -137,3 +137,57 @@ describe('health endpoint', () => {
     process.env.NODE_ENV = nodeEnv;
   });
 });
+
+describe('demo transaction endpoint', () => {
+  it('emits a correlated successful transaction response', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/demo/transactions?delayMs=1',
+      headers: {
+        [correlationIdHeader]: 'demo-correlation',
+        [transactionIdHeader]: 'demo-transaction',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      status: 'succeeded',
+      transactionId: 'demo-transaction',
+      correlationId: 'demo-correlation',
+      simulatedDelayMs: 1,
+    });
+  });
+
+  it('emits a controlled failure for incident demonstrations', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/demo/transactions?outcome=error',
+      headers: {
+        [correlationIdHeader]: 'failed-correlation',
+        [transactionIdHeader]: 'failed-transaction',
+      },
+    });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      status: 'failed',
+      transactionId: 'failed-transaction',
+      correlationId: 'failed-correlation',
+      simulatedDelayMs: 0,
+    });
+  });
+
+  it('exports RED metrics in Prometheus text format', async () => {
+    await app.inject({ method: 'GET', url: '/demo/transactions' });
+    await app.inject({ method: 'GET', url: '/demo/transactions?outcome=error' });
+
+    const response = await app.inject({ method: 'GET', url: '/metrics' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('http_requests_total');
+    expect(response.body).toContain('http_request_errors_total');
+    expect(response.body).toContain('http_request_duration_seconds_count');
+    expect(response.body).toContain('route="/demo/transactions"');
+    expect(response.body).toContain('status="503"');
+  });
+});
