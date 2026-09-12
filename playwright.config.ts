@@ -1,6 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
 const port = 3102;
+const databaseUrl =
+  process.env.DATABASE_URL ??
+  'postgresql://observability:observability@localhost:5432/observability';
+const shellDatabaseUrl = databaseUrl.replaceAll("'", "'\\''");
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -13,7 +17,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: `PORT=${port} HOST=127.0.0.1 npm run start`,
+    command: `DATABASE_URL='${shellDatabaseUrl}' PORT=${port} HOST=127.0.0.1 npm run start`,
     port,
     reuseExistingServer: !process.env.CI,
   },
