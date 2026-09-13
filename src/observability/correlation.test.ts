@@ -7,6 +7,7 @@ import {
   getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
+  traceparentHeader,
 } from './correlation.js';
 
 function requestWithHeaders(headers: IncomingMessage['headers']): IncomingMessage {
@@ -48,5 +49,31 @@ describe('correlation context', () => {
     const request = requestWithHeaders({});
 
     expect(getCorrelationContext(request)).toBe(getCorrelationContext(request));
+  });
+
+  it('extracts a trace id from a valid W3C traceparent header', () => {
+    const context = getCorrelationContext(
+      requestWithHeaders({
+        [traceparentHeader]: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
+      }),
+    );
+
+    expect(context.traceId).toBe('4bf92f3577b34da6a3ce929d0e0e4736');
+  });
+
+  it('omits trace id when traceparent is unsafe or invalid', () => {
+    const invalidTraceContext = getCorrelationContext(
+      requestWithHeaders({
+        [traceparentHeader]: '00-00000000000000000000000000000000-00f067aa0ba902b7-01',
+      }),
+    );
+    const duplicateTraceContext = getCorrelationContext(
+      requestWithHeaders({
+        [traceparentHeader]: ['00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'],
+      }),
+    );
+
+    expect(invalidTraceContext.traceId).toBeUndefined();
+    expect(duplicateTraceContext.traceId).toBeUndefined();
   });
 });
