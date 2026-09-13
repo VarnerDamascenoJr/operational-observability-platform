@@ -46,6 +46,21 @@ curl --fail --silent --show-error "$api_base_url/health" >/dev/null
 curl --fail --silent --show-error http://localhost:13133/ >/dev/null
 curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/datasources |
   jq --exit-status 'map(.uid) | contains(["prometheus", "tempo", "loki"])' >/dev/null
+
+for _ in $(seq 1 10); do
+  dashboard_uids=$(curl --fail --silent --show-error --user admin:admin     'http://localhost:3001/api/search?type=dash-db' |
+    jq --raw-output '[.[].uid] | join(" ")')
+  if [[ " $dashboard_uids " == *" oop-service-technical "* && " $dashboard_uids " == *" oop-demo-business "* ]]; then
+    break
+  fi
+  sleep 1
+done
+
+curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/dashboards/uid/oop-service-technical |
+  jq --exit-status '.dashboard.title == "Operational Observability - Service Technical"' >/dev/null
+curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/dashboards/uid/oop-demo-business |
+  jq --exit-status '.dashboard.title == "Operational Observability - Demo Business Transactions"' >/dev/null
+
 curl --fail --silent --show-error --get \
   --data-urlencode 'query=up{job="otel-collector"}' \
   http://localhost:9090/api/v1/query |
@@ -131,9 +146,28 @@ demo_response=$(curl --fail --silent --show-error \
   "$api_base_url/demo/transactions?delayMs=10&asyncMs=5")
 demo_trace_id=$(printf '%s' "$demo_response" | jq --raw-output '.traceId')
 
+curl --fail --silent --show-error \
+  --header 'x-correlation-id: smoke-demo-slow-correlation' \
+  --header 'x-transaction-id: smoke-demo-slow-transaction' \
+  "$api_base_url/demo/transactions?dependency=slow&delayMs=5&asyncMs=1" >/dev/null
+
+failure_body=$(mktemp)
+failure_status=$(curl --silent --show-error \
+  --output "$failure_body" \
+  --write-out '%{http_code}' \
+  --header 'x-correlation-id: smoke-demo-failure-correlation' \
+  --header 'x-transaction-id: smoke-demo-failure-transaction' \
+  "$api_base_url/demo/transactions?dependency=unavailable&asyncMs=1")
+test "$failure_status" = '503'
+jq --exit-status '.status == "failed" and .traceId != null' "$failure_body" >/dev/null
+
 test "$demo_trace_id" != 'null'
-curl --fail --silent --show-error "$api_base_url/metrics" |
-  grep 'route="/demo/transactions"' >/dev/null
+metrics_body=$(curl --fail --silent --show-error "$api_base_url/metrics")
+printf '%s' "$metrics_body" | grep 'route="/demo/transactions"' >/dev/null
+printf '%s' "$metrics_body" | grep 'demo_transactions_total' >/dev/null
+printf '%s' "$metrics_body" | grep 'outcome="success"' >/dev/null
+printf '%s' "$metrics_body" | grep 'outcome="error"' >/dev/null
+printf '%s' "$metrics_body" | grep 'dependency_mode="slow"' >/dev/null
 
 for _ in $(seq 1 10); do
   if curl --fail --silent --show-error "http://localhost:3200/api/traces/$demo_trace_id" >/dev/null 2>&1; then

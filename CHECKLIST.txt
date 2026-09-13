@@ -43,12 +43,12 @@ Como usar
 
 4. Dashboards e correlacao
 --------------------------
-[ ] Criar dashboard tecnico por servico: throughput, erros e latencia.
-[ ] Criar dashboard de negocio: transacoes, sucesso e falhas.
-[ ] Criar filtros por tenant, servico, ambiente e periodo.
-[ ] Criar links do dashboard para traces no Tempo.
-[ ] Criar links de traces para logs no Loki.
-[ ] Documentar o modelo de correlacao entre request, evento e transacao.
+[x] Criar dashboard tecnico por servico: throughput, erros e latencia.
+[x] Criar dashboard de negocio: transacoes, sucesso e falhas.
+[x] Criar filtros por servico, ambiente e periodo.
+[x] Criar links do dashboard para traces no Tempo.
+[x] Criar links de traces para logs no Loki.
+[x] Documentar o modelo de correlacao entre request, evento e transacao.
 
 5. SLOs e error budget
 -----------------------
