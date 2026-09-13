@@ -14,6 +14,7 @@ import {
   traceparentHeader,
 } from './observability/correlation.js';
 import { HttpMetrics } from './observability/metrics.js';
+import { registerSloRoutes } from './slo.js';
 import {
   buildTraceparent,
   createSpanId,
@@ -177,6 +178,8 @@ export function buildApp(options: BuildAppOptions = {}) {
     void reply.type('text/plain; version=0.0.4; charset=utf-8');
     return metrics.renderPrometheus();
   });
+
+  registerSloRoutes(app, options.database);
   app.get('/demo/transactions', async (request, reply) => {
     const query = request.query as {
       asyncMs?: string;

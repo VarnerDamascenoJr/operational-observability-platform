@@ -36,7 +36,7 @@ describe('health endpoint', () => {
           coreTablesReady: true,
           database: 'observability_test',
           latencyMilliseconds: expect.any(Number),
-          migrationsApplied: 2,
+          migrationsApplied: 3,
           status: 'ok',
         },
       },
@@ -285,7 +285,7 @@ function createHealthyDatabase(): SqlExecutor {
           control_plane_schema_ready: true,
           core_tables_ready: true,
           database_name: 'observability_test',
-          migrations_applied: 2,
+          migrations_applied: 3,
         } as unknown as Row,
       ]);
     },

@@ -52,12 +52,12 @@ Como usar
 
 5. SLOs e error budget
 -----------------------
-[ ] Modelar projetos, servicos, indicadores e objetivos no PostgreSQL.
-[ ] Criar API para cadastrar e consultar SLOs.
-[ ] Calcular disponibilidade e SLI de latencia.
-[ ] Calcular consumo e saldo de error budget.
-[ ] Exibir o estado do SLO em dashboard ou endpoint.
-[ ] Cobrir os calculos com testes unitarios.
+[x] Modelar projetos, servicos, indicadores e objetivos no PostgreSQL.
+[x] Criar API para cadastrar e consultar SLOs.
+[x] Calcular disponibilidade e SLI de latencia.
+[x] Calcular consumo e saldo de error budget.
+[x] Exibir o estado do SLO em dashboard ou endpoint.
+[x] Cobrir os calculos com testes unitarios.
 
 6. Alertas baseados em sintomas
 --------------------------------
