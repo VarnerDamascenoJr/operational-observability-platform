@@ -41,6 +41,15 @@ recebidos nesses headers sao propagados; valores ausentes ou inseguros sao
 substituidos por UUIDs. Consulte `docs/correlation.md` para o contrato completo
 de IDs e logs estruturados.
 
+O endpoint `GET /demo/transactions` simula uma transacao operacional com etapa
+assincrona, dependencia externa lenta ou indisponivel, metricas RED, logs
+correlacionados e traces/logs OTLP quando `OTEL_ENABLED=true`. Exemplos:
+
+```bash
+curl 'http://localhost:3000/demo/transactions?delayMs=50&asyncMs=10'
+curl 'http://localhost:3000/demo/transactions?dependency=unavailable'
+```
+
 ## Banco de dados
 
 As migrations SQL ficam em `migrations/` e seguem o formato
@@ -85,7 +94,8 @@ npm run smoke:observability
 `validate:observability` verifica as configuracoes do Compose, Collector e
 Prometheus. `smoke:observability` verifica ingestao OTLP, persistencia de trace
 no Tempo, persistencia de log correlacionado no Loki, scrape do Collector pelo
-Prometheus e provisionamento das fontes no Grafana.
+Prometheus, provisionamento das fontes no Grafana e uma chamada real ao endpoint
+`/demo/transactions` exportando trace/log correlacionados para o Collector.
 
 ## Qualidade
 

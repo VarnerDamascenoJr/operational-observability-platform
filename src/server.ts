@@ -6,15 +6,19 @@ import { buildApp } from './app.js';
 import { loadDatabaseConfig } from './config/database.js';
 import { runMigrations } from './database/migrations.js';
 import { PostgresDatabase } from './database/postgres.js';
+import { createTelemetryExporterFromEnv } from './observability/otlp.js';
 
 if (existsSync('.env')) {
   loadEnvFile('.env');
 }
 
 const database = new PostgresDatabase(loadDatabaseConfig());
+const environment = process.env.NODE_ENV ?? 'development';
+const serviceName = 'operational-observability-platform';
 const app = buildApp({
   closeDatabase: () => database.close(),
   database,
+  telemetry: createTelemetryExporterFromEnv(process.env, { environment, serviceName }),
 });
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '0.0.0.0';
