@@ -21,7 +21,7 @@ cleanup() {
 
 trap cleanup EXIT
 
-docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null
+docker compose up -d --wait postgres otel-collector prometheus tempo loki grafana >/dev/null
 npm run build >/dev/null
 DATABASE_URL="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}" npm run db:migrate >/dev/null
 
