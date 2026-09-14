@@ -43,6 +43,71 @@ for _ in $(seq 1 30); do
 done
 curl --fail --silent --show-error "$api_base_url/health" >/dev/null
 
+slo_payload=$(mktemp)
+cat >"$slo_payload" <<'JSON'
+{
+  "project": {
+    "slug": "portfolio-observability",
+    "name": "Portfolio Observability"
+  },
+  "service": {
+    "slug": "operational-observability-platform",
+    "name": "Operational Observability Platform",
+    "environment": "smoke",
+    "owner": "platform"
+  },
+  "slug": "smoke-demo-transaction-slo",
+  "name": "Smoke demo transaction SLO",
+  "description": "SLO demonstrativo validado pelo smoke local.",
+  "windowDays": 7,
+  "objectives": [
+    {
+      "type": "availability",
+      "targetPercentage": 99
+    },
+    {
+      "type": "latency",
+      "targetPercentage": 95,
+      "latencyThresholdMilliseconds": 500
+    }
+  ]
+}
+JSON
+slo_response=$(curl --fail --silent --show-error \
+  --header 'content-type: application/json' \
+  --data @"$slo_payload" \
+  "$api_base_url/slos")
+slo_id=$(printf '%s' "$slo_response" | jq --raw-output '.id')
+test "$slo_id" != 'null'
+
+curl --fail --silent --show-error "$api_base_url/slos" |
+  jq --exit-status '.slos[] | select(.slug == "smoke-demo-transaction-slo")' >/dev/null
+
+evaluation_payload=$(mktemp)
+cat >"$evaluation_payload" <<'JSON'
+{
+  "windowStartedAt": "2026-09-13T00:00:00.000Z",
+  "windowEndedAt": "2026-09-14T00:00:00.000Z",
+  "indicators": {
+    "availability": {
+      "totalEvents": 1000,
+      "goodEvents": 995
+    },
+    "latency": {
+      "totalEvents": 1000,
+      "goodEvents": 940
+    }
+  }
+}
+JSON
+curl --fail --silent --show-error \
+  --header 'content-type: application/json' \
+  --data @"$evaluation_payload" \
+  "$api_base_url/slos/$slo_id/evaluations" |
+  jq --exit-status '.overallStatus == "breached"' >/dev/null
+curl --fail --silent --show-error "$api_base_url/slos/$slo_id/status" |
+  jq --exit-status '.overallStatus == "breached"' >/dev/null
+
 curl --fail --silent --show-error http://localhost:13133/ >/dev/null
 curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/datasources |
   jq --exit-status 'map(.uid) | contains(["prometheus", "tempo", "loki"])' >/dev/null

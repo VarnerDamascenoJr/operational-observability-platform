@@ -80,3 +80,115 @@ test('demo transaction supports success and controlled dependency failure', asyn
     transactionId: 'e2e-failed-transaction',
   });
 });
+
+test('SLO API configures objectives and calculates error budget state', async ({ request }) => {
+  const createResponse = await request.post('/slos', {
+    data: {
+      project: {
+        slug: 'portfolio-observability',
+        name: 'Portfolio Observability',
+      },
+      service: {
+        slug: 'operational-observability-platform',
+        name: 'Operational Observability Platform',
+        environment: 'e2e',
+        owner: 'platform',
+      },
+      slug: 'demo-transaction-slo',
+      name: 'Demo transaction SLO',
+      description: 'Demonstrates availability, latency and error budget calculations.',
+      windowDays: 7,
+      objectives: [
+        {
+          type: 'availability',
+          targetPercentage: 99,
+        },
+        {
+          type: 'latency',
+          targetPercentage: 95,
+          latencyThresholdMilliseconds: 500,
+        },
+      ],
+    },
+  });
+
+  expect(createResponse.status()).toBe(201);
+  const created = (await createResponse.json()) as {
+    id: string;
+    objectives: Array<{ type: string }>;
+    slug: string;
+  };
+  expect(created.slug).toBe('demo-transaction-slo');
+  expect(created.objectives.map((objective) => objective.type).sort()).toEqual([
+    'availability',
+    'latency',
+  ]);
+
+  const listResponse = await request.get('/slos');
+
+  await expect(listResponse).toBeOK();
+  await expect(listResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      slos: expect.arrayContaining([expect.objectContaining({ slug: 'demo-transaction-slo' })]),
+    }),
+  );
+
+  const evaluationResponse = await request.post(`/slos/${created.id}/evaluations`, {
+    data: {
+      windowStartedAt: '2026-09-13T00:00:00.000Z',
+      windowEndedAt: '2026-09-14T00:00:00.000Z',
+      indicators: {
+        availability: {
+          totalEvents: 1_000,
+          goodEvents: 995,
+        },
+        latency: {
+          totalEvents: 1_000,
+          goodEvents: 940,
+        },
+      },
+    },
+  });
+
+  expect(evaluationResponse.status()).toBe(201);
+  const evaluation = (await evaluationResponse.json()) as {
+    objectives: Array<{
+      errorBudgetConsumedPercentage: number;
+      observedPercentage: number;
+      status: string;
+      type: string;
+    }>;
+    overallStatus: string;
+  };
+  expect(evaluation.overallStatus).toBe('breached');
+  expect(evaluation.objectives).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        errorBudgetConsumedPercentage: 50,
+        observedPercentage: 99.5,
+        status: 'ok',
+        type: 'availability',
+      }),
+      expect.objectContaining({
+        errorBudgetConsumedPercentage: 120,
+        observedPercentage: 94,
+        status: 'breached',
+        type: 'latency',
+      }),
+    ]),
+  );
+
+  const statusResponse = await request.get(`/slos/${created.id}/status`);
+
+  await expect(statusResponse).toBeOK();
+  await expect(statusResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      overallStatus: 'breached',
+      slo: expect.objectContaining({ slug: 'demo-transaction-slo' }),
+      window: {
+        startedAt: '2026-09-13T00:00:00.000Z',
+        endedAt: '2026-09-14T00:00:00.000Z',
+      },
+    }),
+  );
+});

@@ -50,6 +50,10 @@ curl 'http://localhost:3000/demo/transactions?delayMs=50&asyncMs=10'
 curl 'http://localhost:3000/demo/transactions?dependency=unavailable'
 ```
 
+A API de SLO permite configurar objetivos por servico, avaliar janelas de
+`availability` e `latency` e consultar consumo de error budget. Consulte
+[`docs/slo-error-budget.md`](docs/slo-error-budget.md) para exemplos completos.
+
 ## Banco de dados
 
 As migrations SQL ficam em `migrations/` e seguem o formato
@@ -123,5 +127,5 @@ check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 
 ## Proximo marco
 
-Modelar SLOs, SLIs e error budget no PostgreSQL usando a telemetria demonstrada
-nos dashboards como base operacional.
+Criar alertas baseados em sintomas usando os SLOs e dashboards ja modelados como
+ponto de investigacao.
