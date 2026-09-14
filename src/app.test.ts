@@ -279,7 +279,11 @@ describe('demo transaction endpoint', () => {
 
 function createHealthyDatabase(): SqlExecutor {
   return {
-    async query<Row extends QueryResultRow = QueryResultRow>() {
+    async query<Row extends QueryResultRow = QueryResultRow>(statement: string) {
+      if (statement.includes('sli_evaluation_windows')) {
+        return queryResult<Row>([]);
+      }
+
       return queryResult<Row>([
         {
           control_plane_schema_ready: true,

@@ -61,14 +61,14 @@ Como usar
 
 6. Alertas baseados em sintomas
 --------------------------------
-[ ] Configurar regras de alerta no Prometheus.
+[x] Configurar regras de alerta no Prometheus.
 [ ] Configurar roteamento de alertas no Alertmanager.
-[ ] Criar alerta de aumento de erros.
-[ ] Criar alerta de degradacao de latencia.
-[ ] Criar alerta de consumo acelerado de error budget.
+[x] Criar alerta de aumento de erros.
+[x] Criar alerta de degradacao de latencia.
+[x] Criar alerta de consumo acelerado de error budget.
 [ ] Criar alerta de queda de transacoes bem-sucedidas.
 [ ] Registrar alertas e seus estados na API da plataforma.
-[ ] Evitar alertas duplicados para o mesmo sintoma.
+[x] Evitar alertas duplicados para o mesmo sintoma.
 
 7. Incidentes e investigacao guiada
 -----------------------------------
