@@ -13,6 +13,7 @@ import {
   transactionIdHeader,
   traceparentHeader,
 } from './observability/correlation.js';
+import { registerIncidentRoutes } from './incidents.js';
 import { HttpMetrics } from './observability/metrics.js';
 import { registerSloRoutes, renderSloPrometheusMetrics } from './slo.js';
 import {
@@ -196,6 +197,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   });
 
   registerSloRoutes(app, options.database);
+  registerIncidentRoutes(app, options.database);
   app.get('/demo/transactions', async (request, reply) => {
     const query = request.query as {
       asyncMs?: string;

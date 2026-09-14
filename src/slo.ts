@@ -2,12 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import type { QueryResultRow } from 'pg';
 
 import type { SqlExecutor } from './database/postgres.js';
+import { slugPattern, uuidPattern } from './validation/patterns.js';
 
 export type SliType = 'availability' | 'latency';
 export type SliStatus = 'breached' | 'no_data' | 'ok';
-
-const slugPattern = /^[a-z0-9][a-z0-9_-]{1,62}[a-z0-9]$/;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface SliObjectiveInput {
   latencyThresholdMilliseconds?: number;
