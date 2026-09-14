@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d --wait postgres",
     "start": "node dist/server.js",
     "db:migrate": "tsx src/database/migrate.ts",
     "lint": "eslint .",
