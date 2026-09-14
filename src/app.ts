@@ -95,6 +95,7 @@ export function buildApp(options: BuildAppOptions = {}) {
         {
           ...bindings,
           correlation_id: context.correlationId,
+          ...(context.traceId ? { trace_id: context.traceId } : {}),
           transaction_id: context.transactionId,
         },
         childLoggerOptions,

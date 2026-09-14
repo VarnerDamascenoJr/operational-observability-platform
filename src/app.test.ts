@@ -9,6 +9,7 @@ import {
   correlationIdHeader,
   requestIdHeader,
   transactionIdHeader,
+  traceparentHeader,
 } from './observability/correlation.js';
 
 const app = buildApp({ database: createHealthyDatabase() });
@@ -112,6 +113,7 @@ describe('health endpoint', () => {
         [requestIdHeader]: 'logged-request',
         [correlationIdHeader]: 'logged-correlation',
         [transactionIdHeader]: 'logged-transaction',
+        [traceparentHeader]: '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01',
       },
     });
     await loggedApp.close();
@@ -124,6 +126,7 @@ describe('health endpoint', () => {
           environment: process.env.NODE_ENV ?? 'development',
           request_id: 'logged-request',
           correlation_id: 'logged-correlation',
+          trace_id: '4bf92f3577b34da6a3ce929d0e0e4736',
           transaction_id: 'logged-transaction',
         }),
       ]),
