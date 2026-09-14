@@ -31,7 +31,7 @@ NODE_ENV=production \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
   DATABASE_URL="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}" \
   PORT="$api_port" \
-  HOST=127.0.0.1 \
+  HOST=0.0.0.0 \
   node dist/server.js >"$api_log_file" 2>&1 &
 api_pid="$!"
 
@@ -130,6 +130,19 @@ curl --fail --silent --show-error --get \
   --data-urlencode 'query=up{job="otel-collector"}' \
   http://localhost:9090/api/v1/query |
   jq --exit-status '.data.result[] | select(.value[1] == "1")' >/dev/null
+
+for _ in $(seq 1 10); do
+  api_target_count=$(curl --fail --silent --show-error --get \
+    --data-urlencode 'query=up{job="observability-api"}' \
+    http://localhost:9090/api/v1/query |
+    jq '[.data.result[] | select(.value[1] == "1")] | length')
+  if [ "$api_target_count" -gt 0 ]; then
+    break
+  fi
+  sleep 3
+done
+
+test "${api_target_count:-0}" -gt 0
 
 curl --fail --silent --show-error \
   --header 'Content-Type: application/json' \
@@ -233,6 +246,25 @@ printf '%s' "$metrics_body" | grep 'demo_transactions_total' >/dev/null
 printf '%s' "$metrics_body" | grep 'outcome="success"' >/dev/null
 printf '%s' "$metrics_body" | grep 'outcome="error"' >/dev/null
 printf '%s' "$metrics_body" | grep 'dependency_mode="slow"' >/dev/null
+printf '%s' "$metrics_body" | grep 'slo_error_budget_consumed_percentage' >/dev/null
+
+for _ in $(seq 1 16); do
+  firing_alerts=$(curl --fail --silent --show-error http://localhost:9090/api/v1/alerts)
+  if printf '%s' "$firing_alerts" | jq --exit-status '
+    ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpErrorRate" and .state == "firing")] | length > 0) and
+    ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpLatency" and .state == "firing")] | length > 0) and
+    ([.data.alerts[] | select(.labels.alertname == "OOPSloErrorBudgetBurn" and .state == "firing")] | length > 0)
+  ' >/dev/null; then
+    break
+  fi
+  sleep 5
+done
+
+printf '%s' "${firing_alerts:-}" | jq --exit-status '
+  ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpErrorRate" and .state == "firing")] | length > 0) and
+  ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpLatency" and .state == "firing")] | length > 0) and
+  ([.data.alerts[] | select(.labels.alertname == "OOPSloErrorBudgetBurn" and .state == "firing")] | length > 0)
+' >/dev/null
 
 for _ in $(seq 1 10); do
   if curl --fail --silent --show-error "http://localhost:3200/api/traces/$demo_trace_id" >/dev/null 2>&1; then

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateSliEvaluation, overallSloStatus } from './slo.js';
+import { calculateSliEvaluation, overallSloStatus, renderSloPrometheusMetrics } from './slo.js';
+import type { SqlExecutor } from './database/postgres.js';
+import type { QueryResult, QueryResultRow } from 'pg';
 
 describe('SLO calculations', () => {
   it('calculates availability SLI and remaining error budget', () => {
@@ -75,3 +77,39 @@ describe('SLO calculations', () => {
     expect(overallSloStatus([{ status: 'ok' }, { status: 'breached' }])).toBe('breached');
   });
 });
+
+describe('SLO Prometheus metrics', () => {
+  it('renders latest SLO error budget gauges', async () => {
+    const database: SqlExecutor = {
+      async query<Row extends QueryResultRow = QueryResultRow>() {
+        return queryResult<Row>([
+          {
+            service_slug: 'operational-observability-platform',
+            environment: 'test',
+            slo_slug: 'demo-transaction-slo',
+            indicator_type: 'latency',
+            observed_percentage: '94.00000',
+            error_budget_consumed_percentage: '120.000',
+            error_budget_remaining_percentage: '-20.000',
+            status: 'breached',
+            window_ended_at: new Date('2026-09-14T00:00:00.000Z'),
+          } as unknown as Row,
+        ]);
+      },
+    };
+
+    await expect(renderSloPrometheusMetrics(database)).resolves.toContain(
+      'slo_error_budget_consumed_percentage{service="operational-observability-platform",environment="test",slo="demo-transaction-slo",sli_type="latency",status="breached"} 120',
+    );
+  });
+});
+
+function queryResult<Row extends QueryResultRow>(rows: Row[]): QueryResult<Row> {
+  return {
+    command: 'SELECT',
+    fields: [],
+    oid: 0,
+    rowCount: rows.length,
+    rows,
+  };
+}

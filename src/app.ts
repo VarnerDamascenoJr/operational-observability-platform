@@ -14,7 +14,7 @@ import {
   traceparentHeader,
 } from './observability/correlation.js';
 import { HttpMetrics } from './observability/metrics.js';
-import { registerSloRoutes } from './slo.js';
+import { registerSloRoutes, renderSloPrometheusMetrics } from './slo.js';
 import {
   buildTraceparent,
   createSpanId,
@@ -174,9 +174,25 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return response;
   });
-  app.get('/metrics', async (_request, reply) => {
+  app.get('/metrics', async (request, reply) => {
     void reply.type('text/plain; version=0.0.4; charset=utf-8');
-    return metrics.renderPrometheus();
+
+    let sloMetrics = '';
+
+    if (options.database) {
+      try {
+        sloMetrics = await renderSloPrometheusMetrics(options.database);
+      } catch (error) {
+        request.log.warn(
+          {
+            error: error instanceof Error ? error.message : 'unknown SLO metrics error',
+          },
+          'slo metrics rendering failed',
+        );
+      }
+    }
+
+    return `${metrics.renderPrometheus()}${sloMetrics}`;
   });
 
   registerSloRoutes(app, options.database);

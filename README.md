@@ -54,6 +54,10 @@ A API de SLO permite configurar objetivos por servico, avaliar janelas de
 `availability` e `latency` e consultar consumo de error budget. Consulte
 [`docs/slo-error-budget.md`](docs/slo-error-budget.md) para exemplos completos.
 
+As regras Prometheus de alerta baseadas em sintomas cobrem erro HTTP alto,
+latencia HTTP alta e consumo de error budget. O runbook local esta em
+[`docs/symptom-alerts.md`](docs/symptom-alerts.md).
+
 ## Banco de dados
 
 As migrations SQL ficam em `migrations/` e seguem o formato
@@ -102,11 +106,12 @@ npm run smoke:observability
 ```
 
 `validate:observability` verifica as configuracoes do Compose, Collector,
-Prometheus e dashboards provisionados. `smoke:observability` verifica ingestao
-OTLP, persistencia de trace no Tempo, persistencia de log correlacionado no
-Loki, scrape do Collector pelo Prometheus, provisionamento das fontes e
-dashboards no Grafana e chamadas reais ao endpoint `/demo/transactions`
-exportando trace/log correlacionados e metricas de sucesso, falha e degradacao.
+Prometheus, regras de alerta e dashboards provisionados. `smoke:observability`
+verifica ingestao OTLP, persistencia de trace no Tempo, persistencia de log
+correlacionado no Loki, scrape do Collector e da API pelo Prometheus,
+provisionamento das fontes e dashboards no Grafana, chamadas reais ao endpoint
+`/demo/transactions`, metricas de sucesso/falha/degradacao, SLO demonstrativo e
+alertas de erro, latencia e error budget disparados.
 
 ## Qualidade
 
@@ -127,5 +132,5 @@ check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 
 ## Proximo marco
 
-Criar alertas baseados em sintomas usando os SLOs e dashboards ja modelados como
-ponto de investigacao.
+Modelar incidentes, evidencias, hipoteses e linha do tempo para transformar
+alertas em investigacao guiada dentro da plataforma.

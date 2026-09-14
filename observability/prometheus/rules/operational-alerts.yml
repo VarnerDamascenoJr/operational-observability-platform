@@ -1,0 +1,62 @@
+groups:
+  - name: operational-observability-platform-symptoms
+    rules:
+      - alert: OOPHighHttpErrorRate
+        expr: |
+          (
+            sum by (service, environment, route) (
+              http_request_errors_total{route!="/metrics"}
+            )
+            /
+            clamp_min(
+              sum by (service, environment, route) (
+                http_requests_total{route!="/metrics"}
+              ),
+              1
+            )
+          ) > 0.2
+        labels:
+          severity: warning
+          symptom: errors
+          runbook: docs/symptom-alerts.md#erro-http-alto
+          dashboard_uid: oop-service-technical
+        annotations:
+          summary: 'High HTTP error rate on {{ $labels.service }} {{ $labels.route }}'
+          description: 'More than 20% of requests in the current local API process returned 5xx for service={{ $labels.service }}, environment={{ $labels.environment }}, route={{ $labels.route }}. Start with the technical dashboard, then inspect Tempo and Loki using the trace_id from a failed request.'
+
+      - alert: OOPHighHttpLatency
+        expr: |
+          (
+            sum by (service, environment, route) (
+              http_request_duration_seconds_sum{route!="/metrics"}
+            )
+            /
+            clamp_min(
+              sum by (service, environment, route) (
+                http_request_duration_seconds_count{route!="/metrics"}
+              ),
+              1
+            )
+          ) > 0.1
+        labels:
+          severity: warning
+          symptom: latency
+          runbook: docs/symptom-alerts.md#latencia-http-alta
+          dashboard_uid: oop-service-technical
+        annotations:
+          summary: 'High HTTP latency on {{ $labels.service }} {{ $labels.route }}'
+          description: 'Average request duration in the current local API process exceeded the demonstration threshold for service={{ $labels.service }}, environment={{ $labels.environment }}, route={{ $labels.route }}. Check whether dependency=slow traffic is present before treating this as a capacity issue.'
+
+      - alert: OOPSloErrorBudgetBurn
+        expr: |
+          max by (service, environment, slo, sli_type) (
+            slo_error_budget_consumed_percentage{status="breached"}
+          ) > 100
+        labels:
+          severity: page
+          symptom: error_budget
+          runbook: docs/symptom-alerts.md#consumo-acelerado-de-error-budget
+          dashboard_uid: oop-demo-business
+        annotations:
+          summary: 'SLO error budget exhausted for {{ $labels.slo }} {{ $labels.sli_type }}'
+          description: 'The latest SLO evaluation consumed more than 100% of the error budget for service={{ $labels.service }}, environment={{ $labels.environment }}, slo={{ $labels.slo }}, sli={{ $labels.sli_type }}. Use the business dashboard to confirm impact and then inspect traces/logs for the affected window.'

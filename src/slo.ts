@@ -148,6 +148,18 @@ interface LatestEvaluationRow extends QueryResultRow {
   window_started_at: Date;
 }
 
+interface SloMetricRow extends QueryResultRow {
+  environment: string;
+  error_budget_consumed_percentage: string | null;
+  error_budget_remaining_percentage: string | null;
+  indicator_type: SliType;
+  observed_percentage: string | null;
+  service_slug: string;
+  slo_slug: string;
+  status: SliStatus | null;
+  window_ended_at: Date | null;
+}
+
 class ValidationError extends Error {}
 
 export function calculateSliEvaluation(
@@ -203,6 +215,78 @@ export function overallSloStatus(
   }
 
   return 'ok';
+}
+
+export async function renderSloPrometheusMetrics(database: SqlExecutor): Promise<string> {
+  const result = await database.query<SloMetricRow>(`
+    SELECT
+      slo.slug AS slo_slug,
+      svc.slug AS service_slug,
+      svc.environment,
+      sli.indicator_type,
+      latest.observed_percentage,
+      latest.error_budget_consumed_percentage,
+      latest.error_budget_remaining_percentage,
+      latest.status,
+      latest.window_ended_at
+    FROM control_plane.sli_definitions sli
+    JOIN control_plane.slo_definitions slo ON slo.id = sli.slo_id
+    JOIN control_plane.services svc ON svc.id = slo.service_id
+    LEFT JOIN LATERAL (
+      SELECT
+        observed_percentage,
+        error_budget_consumed_percentage,
+        error_budget_remaining_percentage,
+        status,
+        window_ended_at
+      FROM control_plane.sli_evaluation_windows evaluation_window
+      WHERE evaluation_window.sli_id = sli.id
+      ORDER BY evaluation_window.window_ended_at DESC
+      LIMIT 1
+    ) latest ON true
+    WHERE latest.window_ended_at IS NOT NULL
+    ORDER BY svc.slug, slo.slug, sli.indicator_type
+  `);
+  const lines = [
+    '# HELP slo_observed_percentage Latest observed SLI percentage by service, SLO and indicator.',
+    '# TYPE slo_observed_percentage gauge',
+    '# HELP slo_error_budget_consumed_percentage Latest consumed error budget percentage by service, SLO and indicator.',
+    '# TYPE slo_error_budget_consumed_percentage gauge',
+    '# HELP slo_error_budget_remaining_percentage Latest remaining error budget percentage by service, SLO and indicator.',
+    '# TYPE slo_error_budget_remaining_percentage gauge',
+  ];
+
+  for (const row of result.rows) {
+    const labels = metricLabels({
+      service: row.service_slug,
+      environment: row.environment,
+      slo: row.slo_slug,
+      sli_type: row.indicator_type,
+      status: row.status ?? 'no_data',
+    });
+
+    if (row.observed_percentage !== null) {
+      lines.push(`slo_observed_percentage{${labels}} ${Number(row.observed_percentage)}`);
+    }
+
+    if (row.error_budget_consumed_percentage !== null) {
+      lines.push(
+        `slo_error_budget_consumed_percentage{${labels}} ${Number(
+          row.error_budget_consumed_percentage,
+        )}`,
+      );
+    }
+
+    if (row.error_budget_remaining_percentage !== null) {
+      lines.push(
+        `slo_error_budget_remaining_percentage{${labels}} ${Number(
+          row.error_budget_remaining_percentage,
+        )}`,
+      );
+    }
+  }
+
+  return `${lines.join('\n')}\n`;
 }
 
 export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | undefined): void {
@@ -761,6 +845,16 @@ function parseObjectiveRows(value: unknown): SliObjective[] {
       },
     ];
   });
+}
+
+function metricLabels(labels: Record<string, string>): string {
+  return Object.entries(labels)
+    .map(([key, value]) => `${key}="${escapeMetricLabel(value)}"`)
+    .join(',');
+}
+
+function escapeMetricLabel(value: string): string {
+  return value.replaceAll('\\', '\\\\').replaceAll('\n', '\\n').replaceAll('"', '\\"');
 }
 
 function requireRecord(value: unknown, message: string): Record<string, unknown> {
