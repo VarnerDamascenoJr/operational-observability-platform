@@ -31,7 +31,10 @@ npm run db:migrate
 npm run dev
 ```
 
-Verifique a API em `GET http://localhost:3000/health`.
+O servidor tambem valida/aplica migrations no startup antes de aceitar trafego.
+Verifique a API em `GET http://localhost:3000/health`; a resposta informa o
+estado da API, do PostgreSQL, das migrations e das tabelas iniciais do schema
+`control_plane`.
 
 Cada resposta HTTP inclui `x-request-id` e `x-transaction-id`. Valores validos
 recebidos nesses headers sao propagados; valores ausentes ou inseguros sao
@@ -45,9 +48,10 @@ As migrations SQL ficam em `migrations/` e seguem o formato
 PostgreSQL. O executor aplica cada migration em uma transacao, impede execucoes
 concorrentes e recusa alteracoes em arquivos que ja tenham sido aplicados.
 
-A primeira migration cria o schema `control_plane`, reservado para as futuras
-configuracoes e o estado operacional da plataforma. As migrations aplicadas
-sao registradas em `public.schema_migrations`.
+As migrations criam o schema `control_plane` e as tabelas iniciais para
+projetos, servicos e configuracoes operacionais. As migrations aplicadas sao
+registradas em `public.schema_migrations`, com checksum para detectar alteracoes
+em arquivos ja aplicados.
 
 ## Observabilidade local
 
@@ -96,7 +100,9 @@ npm run check
 ```
 
 Os testes unitarios usam Vitest. Os testes end-to-end usam Playwright para
-validar a API compilada e em execucao, incluindo o fluxo HTTP real.
+validar a API compilada e em execucao, incluindo o fluxo HTTP real e o health
+check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
+`postgres` do Docker Compose e aplica migrations antes de iniciar a API.
 
 ## Proximo marco
 

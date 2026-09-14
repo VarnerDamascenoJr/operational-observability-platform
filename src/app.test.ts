@@ -1,29 +1,66 @@
 import { Writable } from 'node:stream';
 
+import type { QueryResult, QueryResultRow } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from './app.js';
+import type { SqlExecutor } from './database/postgres.js';
 import {
   correlationIdHeader,
   requestIdHeader,
   transactionIdHeader,
 } from './observability/correlation.js';
 
-const app = buildApp();
+const app = buildApp({ database: createHealthyDatabase() });
 
 afterAll(async () => {
   await app.close();
 });
 
 describe('health endpoint', () => {
-  it('reports that the API is available', async () => {
+  it('reports that the API and PostgreSQL are available', async () => {
     const response = await app.inject({ method: 'GET', url: '/health' });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['x-request-id']).toMatch(/^req_/);
     expect(response.headers['x-correlation-id']).toMatch(/^corr_/);
-    expect(response.json()).toEqual({ status: 'ok' });
+    expect(response.json()).toEqual({
+      services: {
+        api: {
+          status: 'ok',
+        },
+        postgres: {
+          controlPlaneSchemaReady: true,
+          coreTablesReady: true,
+          database: 'observability_test',
+          latencyMilliseconds: expect.any(Number),
+          migrationsApplied: 2,
+          status: 'ok',
+        },
+      },
+      status: 'ok',
+    });
     expect(response.headers[transactionIdHeader]).toMatch(/^txn_/);
+  });
+
+  it('reports degraded health when PostgreSQL cannot be queried', async () => {
+    const unhealthyApp = buildApp({ database: createFailingDatabase() });
+    const response = await unhealthyApp.inject({ method: 'GET', url: '/health' });
+    await unhealthyApp.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({
+      services: {
+        api: {
+          status: 'ok',
+        },
+        postgres: {
+          error: 'PostgreSQL health query failed',
+          status: 'error',
+        },
+      },
+      status: 'degraded',
+    });
   });
 
   it('propagates valid correlation identifiers', async () => {
@@ -191,3 +228,36 @@ describe('demo transaction endpoint', () => {
     expect(response.body).toContain('status="503"');
   });
 });
+
+function createHealthyDatabase(): SqlExecutor {
+  return {
+    async query<Row extends QueryResultRow = QueryResultRow>() {
+      return queryResult<Row>([
+        {
+          control_plane_schema_ready: true,
+          core_tables_ready: true,
+          database_name: 'observability_test',
+          migrations_applied: 2,
+        } as unknown as Row,
+      ]);
+    },
+  };
+}
+
+function createFailingDatabase(): SqlExecutor {
+  return {
+    async query() {
+      throw new Error('database offline');
+    },
+  };
+}
+
+function queryResult<Row extends QueryResultRow>(rows: Row[]): QueryResult<Row> {
+  return {
+    command: 'SELECT',
+    fields: [],
+    oid: 0,
+    rowCount: rows.length,
+    rows,
+  };
+}
