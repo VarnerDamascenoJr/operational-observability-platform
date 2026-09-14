@@ -11,6 +11,7 @@ import {
   transactionIdHeader,
   traceparentHeader,
 } from './observability/correlation.js';
+import type { DemoTransactionTelemetry, TelemetryExporter } from './observability/otlp.js';
 
 const app = buildApp({ database: createHealthyDatabase() });
 
@@ -180,41 +181,76 @@ describe('health endpoint', () => {
 
 describe('demo transaction endpoint', () => {
   it('emits a correlated successful transaction response', async () => {
-    const response = await app.inject({
+    const telemetry = new CapturingTelemetryExporter();
+    const demoApp = buildApp({ database: createHealthyDatabase(), telemetry });
+    const response = await demoApp.inject({
       method: 'GET',
-      url: '/demo/transactions?delayMs=1',
+      url: '/demo/transactions?delayMs=1&asyncMs=1',
       headers: {
         [correlationIdHeader]: 'demo-correlation',
         [transactionIdHeader]: 'demo-transaction',
       },
     });
+    await demoApp.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      status: 'succeeded',
-      transactionId: 'demo-transaction',
+    const body = response.json() as Record<string, unknown>;
+    expect(body).toEqual({
+      asyncStepMs: 1,
       correlationId: 'demo-correlation',
+      dependencyMode: 'normal',
       simulatedDelayMs: 1,
+      status: 'succeeded',
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+      traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
+      transactionId: 'demo-transaction',
     });
+    expect(response.headers[traceparentHeader]).toBe(body.traceparent);
+    expect(telemetry.samples).toHaveLength(1);
+    expect(telemetry.samples[0]).toEqual(
+      expect.objectContaining({
+        correlationId: 'demo-correlation',
+        outcome: 'success',
+        statusCode: 200,
+        transactionId: 'demo-transaction',
+      }),
+    );
   });
 
   it('emits a controlled failure for incident demonstrations', async () => {
-    const response = await app.inject({
+    const telemetry = new CapturingTelemetryExporter();
+    const demoApp = buildApp({ database: createHealthyDatabase(), telemetry });
+    const response = await demoApp.inject({
       method: 'GET',
-      url: '/demo/transactions?outcome=error',
+      url: '/demo/transactions?dependency=unavailable',
       headers: {
         [correlationIdHeader]: 'failed-correlation',
         [transactionIdHeader]: 'failed-transaction',
       },
     });
+    await demoApp.close();
 
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({
-      status: 'failed',
-      transactionId: 'failed-transaction',
+      asyncStepMs: 10,
       correlationId: 'failed-correlation',
+      dependencyMode: 'unavailable',
       simulatedDelayMs: 0,
+      status: 'failed',
+      traceId: expect.stringMatching(/^[0-9a-f]{32}$/),
+      traceparent: expect.stringMatching(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/),
+      transactionId: 'failed-transaction',
     });
+    expect(telemetry.samples).toHaveLength(1);
+    expect(telemetry.samples[0]).toEqual(
+      expect.objectContaining({
+        correlationId: 'failed-correlation',
+        dependencyMode: 'unavailable',
+        outcome: 'error',
+        statusCode: 503,
+        transactionId: 'failed-transaction',
+      }),
+    );
   });
 
   it('exports RED metrics in Prometheus text format', async () => {
@@ -245,6 +281,15 @@ function createHealthyDatabase(): SqlExecutor {
       ]);
     },
   };
+}
+
+class CapturingTelemetryExporter implements TelemetryExporter {
+  readonly samples: DemoTransactionTelemetry[] = [];
+
+  exportDemoTransaction(sample: DemoTransactionTelemetry): Promise<void> {
+    this.samples.push(sample);
+    return Promise.resolve();
+  }
 }
 
 function createFailingDatabase(): SqlExecutor {

@@ -11,14 +11,25 @@ import {
   getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
+  traceparentHeader,
 } from './observability/correlation.js';
 import { HttpMetrics } from './observability/metrics.js';
+import {
+  buildTraceparent,
+  createSpanId,
+  createTraceId,
+  NoopTelemetryExporter,
+  nowUnixNano,
+  type DemoTransactionTelemetry,
+  type TelemetryExporter,
+} from './observability/otlp.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     correlationId: string;
     observedRoute: string;
     startedAtNanoseconds: bigint;
+    traceId?: string;
     transactionId: string;
   }
 }
@@ -28,6 +39,7 @@ interface BuildAppOptions {
   database?: SqlExecutor;
   loggerStream?: Writable;
   metrics?: HttpMetrics;
+  telemetry?: TelemetryExporter;
 }
 
 interface PostgresHealthRow extends QueryResultRow {
@@ -73,6 +85,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   const environment = process.env.NODE_ENV ?? 'development';
   const serviceName = 'operational-observability-platform';
   const metrics = options.metrics ?? new HttpMetrics({ service: serviceName, environment });
+  const telemetry = options.telemetry ?? new NoopTelemetryExporter();
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
@@ -108,6 +121,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   app.decorateRequest('correlationId', '');
   app.decorateRequest('observedRoute', '');
   app.decorateRequest('startedAtNanoseconds', 0n);
+  app.decorateRequest('traceId');
   app.decorateRequest('transactionId', '');
 
   if (options.closeDatabase) {
@@ -120,6 +134,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     const context = getCorrelationContext(request.raw);
     request.correlationId = context.correlationId;
     request.startedAtNanoseconds = process.hrtime.bigint();
+    request.traceId = context.traceId;
     request.transactionId = context.transactionId;
     void reply.header(requestIdHeader, context.requestId);
     void reply.header(correlationIdHeader, context.correlationId);
@@ -163,45 +178,130 @@ export function buildApp(options: BuildAppOptions = {}) {
     return metrics.renderPrometheus();
   });
   app.get('/demo/transactions', async (request, reply) => {
-    const query = request.query as { delayMs?: string; outcome?: string };
-    const delayMilliseconds = boundedDelay(query.delayMs);
-    await sleep(delayMilliseconds);
+    const query = request.query as {
+      asyncMs?: string;
+      delayMs?: string;
+      dependency?: string;
+      outcome?: string;
+    };
+    const asyncStepMilliseconds = boundedDelay(query.asyncMs, 10);
+    const dependencyMode = normalizeDependencyMode(query.dependency);
+    const requestedDelayMilliseconds = boundedDelay(query.delayMs);
+    const simulatedDelayMilliseconds =
+      dependencyMode === 'slow'
+        ? Math.max(requestedDelayMilliseconds, 500)
+        : requestedDelayMilliseconds;
+    const traceId = request.traceId ?? createTraceId();
+    const rootSpanId = createSpanId();
+    const asyncSpanId = createSpanId();
+    const dependencySpanId = createSpanId();
+    const startUnixNano = nowUnixNano();
+    const traceparent = buildTraceparent(traceId, rootSpanId);
 
-    if (query.outcome === 'error') {
+    void reply.header(traceparentHeader, traceparent);
+
+    const asyncStepStartUnixNano = nowUnixNano();
+    await sleep(asyncStepMilliseconds);
+    const asyncStepEndUnixNano = nowUnixNano();
+
+    const dependencyStartUnixNano = nowUnixNano();
+    await sleep(simulatedDelayMilliseconds);
+    const dependencyEndUnixNano = nowUnixNano();
+    const shouldFail = query.outcome === 'error' || dependencyMode === 'unavailable';
+    const endUnixNano = nowUnixNano();
+    const durationMilliseconds = Number(BigInt(endUnixNano) - BigInt(startUnixNano)) / 1_000_000;
+    const telemetrySample: DemoTransactionTelemetry = {
+      asyncSpanId,
+      asyncStepEndUnixNano,
+      asyncStepStartUnixNano,
+      asyncStepMilliseconds,
+      correlationId: request.correlationId,
+      dependencyEndUnixNano,
+      dependencyMode,
+      dependencySpanId,
+      dependencyStartUnixNano,
+      durationMilliseconds,
+      endUnixNano,
+      outcome: shouldFail ? 'error' : 'success',
+      rootSpanId,
+      simulatedDelayMilliseconds,
+      startUnixNano,
+      statusCode: shouldFail ? 503 : 200,
+      traceId,
+      transactionId: request.transactionId,
+    };
+
+    if (shouldFail) {
       request.log.warn(
         {
+          async_step_ms: asyncStepMilliseconds,
+          dependency_mode: dependencyMode,
           operation: 'demo_transaction',
           outcome: 'error',
-          simulated_delay_ms: delayMilliseconds,
+          simulated_delay_ms: simulatedDelayMilliseconds,
+          span_id: rootSpanId,
+          trace_id: traceId,
         },
         'demo transaction failed',
       );
+      await exportDemoTelemetry(telemetry, telemetrySample, request.log);
       void reply.code(503);
       return {
-        status: 'failed',
-        transactionId: request.transactionId,
+        asyncStepMs: asyncStepMilliseconds,
         correlationId: request.correlationId,
-        simulatedDelayMs: delayMilliseconds,
+        dependencyMode,
+        simulatedDelayMs: simulatedDelayMilliseconds,
+        status: 'failed',
+        traceId,
+        traceparent,
+        transactionId: request.transactionId,
       };
     }
 
     request.log.info(
       {
+        async_step_ms: asyncStepMilliseconds,
+        dependency_mode: dependencyMode,
         operation: 'demo_transaction',
         outcome: 'success',
-        simulated_delay_ms: delayMilliseconds,
+        simulated_delay_ms: simulatedDelayMilliseconds,
+        span_id: rootSpanId,
+        trace_id: traceId,
       },
       'demo transaction completed',
     );
+    await exportDemoTelemetry(telemetry, telemetrySample, request.log);
     return {
-      status: 'succeeded',
-      transactionId: request.transactionId,
+      asyncStepMs: asyncStepMilliseconds,
       correlationId: request.correlationId,
-      simulatedDelayMs: delayMilliseconds,
+      dependencyMode,
+      simulatedDelayMs: simulatedDelayMilliseconds,
+      status: 'succeeded',
+      traceId,
+      traceparent,
+      transactionId: request.transactionId,
     };
   });
 
   return app;
+}
+
+async function exportDemoTelemetry(
+  telemetry: TelemetryExporter,
+  sample: DemoTransactionTelemetry,
+  log: { warn: (fields: Record<string, unknown>, message: string) => void },
+): Promise<void> {
+  try {
+    await telemetry.exportDemoTransaction(sample);
+  } catch (error) {
+    log.warn(
+      {
+        error: error instanceof Error ? error.message : 'unknown telemetry export error',
+        trace_id: sample.traceId,
+      },
+      'demo telemetry export failed',
+    );
+  }
 }
 
 async function checkPostgres(database: SqlExecutor | undefined): Promise<PostgresHealth> {
@@ -272,9 +372,9 @@ async function checkPostgres(database: SqlExecutor | undefined): Promise<Postgre
   }
 }
 
-function boundedDelay(value: string | undefined): number {
+function boundedDelay(value: string | undefined, defaultMilliseconds = 0): number {
   if (!value) {
-    return 0;
+    return defaultMilliseconds;
   }
 
   const parsed = Number.parseInt(value, 10);
@@ -282,6 +382,14 @@ function boundedDelay(value: string | undefined): number {
     return 0;
   }
   return Math.min(parsed, 2_000);
+}
+
+function normalizeDependencyMode(value: string | undefined): 'normal' | 'slow' | 'unavailable' {
+  if (value === 'slow' || value === 'unavailable') {
+    return value;
+  }
+
+  return 'normal';
 }
 
 function sleep(milliseconds: number): Promise<void> {
