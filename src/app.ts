@@ -210,6 +210,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     const shouldFail = query.outcome === 'error' || dependencyMode === 'unavailable';
     const endUnixNano = nowUnixNano();
     const durationMilliseconds = Number(BigInt(endUnixNano) - BigInt(startUnixNano)) / 1_000_000;
+    const outcome = shouldFail ? 'error' : 'success';
     const telemetrySample: DemoTransactionTelemetry = {
       asyncSpanId,
       asyncStepEndUnixNano,
@@ -222,7 +223,7 @@ export function buildApp(options: BuildAppOptions = {}) {
       dependencyStartUnixNano,
       durationMilliseconds,
       endUnixNano,
-      outcome: shouldFail ? 'error' : 'success',
+      outcome,
       rootSpanId,
       simulatedDelayMilliseconds,
       startUnixNano,
@@ -230,6 +231,12 @@ export function buildApp(options: BuildAppOptions = {}) {
       traceId,
       transactionId: request.transactionId,
     };
+
+    metrics.recordDemoTransaction({
+      dependencyMode,
+      durationSeconds: durationMilliseconds / 1_000,
+      outcome,
+    });
 
     if (shouldFail) {
       request.log.warn(

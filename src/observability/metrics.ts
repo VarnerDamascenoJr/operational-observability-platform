@@ -5,6 +5,15 @@ export interface HttpMetricSample {
   durationSeconds: number;
 }
 
+export type DemoDependencyMode = 'normal' | 'slow' | 'unavailable';
+export type DemoTransactionOutcome = 'error' | 'success';
+
+export interface DemoTransactionMetricSample {
+  dependencyMode: DemoDependencyMode;
+  durationSeconds: number;
+  outcome: DemoTransactionOutcome;
+}
+
 interface MetricsIdentity {
   service: string;
   environment: string;
@@ -20,6 +29,8 @@ export class HttpMetrics {
   private readonly requests = new Map<string, number>();
   private readonly errors = new Map<string, number>();
   private readonly durations = new Map<string, DurationAggregate>();
+  private readonly demoTransactions = new Map<string, number>();
+  private readonly demoTransactionDurations = new Map<string, DurationAggregate>();
 
   constructor(identity: MetricsIdentity) {
     this.identity = identity;
@@ -39,11 +50,18 @@ export class HttpMetrics {
       this.errors.set(key, (this.errors.get(key) ?? 0) + 1);
     }
 
-    const current = this.durations.get(key) ?? { count: 0, sum: 0 };
-    this.durations.set(key, {
-      count: current.count + 1,
-      sum: current.sum + sample.durationSeconds,
+    recordDuration(this.durations, key, sample.durationSeconds);
+  }
+
+  recordDemoTransaction(sample: DemoTransactionMetricSample): void {
+    const key = labelsKey({
+      service: this.identity.service,
+      environment: this.identity.environment,
+      outcome: sample.outcome,
+      dependency_mode: sample.dependencyMode,
     });
+    this.demoTransactions.set(key, (this.demoTransactions.get(key) ?? 0) + 1);
+    recordDuration(this.demoTransactionDurations, key, sample.durationSeconds);
   }
 
   renderPrometheus(): string {
@@ -57,6 +75,12 @@ export class HttpMetrics {
       '# HELP http_request_duration_seconds HTTP request duration summary.',
       '# TYPE http_request_duration_seconds summary',
       ...renderDurationSummary('http_request_duration_seconds', this.durations),
+      '# HELP demo_transactions_total Total demo business transactions by outcome and dependency mode.',
+      '# TYPE demo_transactions_total counter',
+      ...renderCounter('demo_transactions_total', this.demoTransactions),
+      '# HELP demo_transaction_duration_seconds Demo business transaction duration summary.',
+      '# TYPE demo_transaction_duration_seconds summary',
+      ...renderDurationSummary('demo_transaction_duration_seconds', this.demoTransactionDurations),
     ];
 
     return `${lines.join('\n')}\n`;
@@ -67,6 +91,18 @@ function labelsKey(labels: Record<string, string>): string {
   return Object.entries(labels)
     .map(([key, value]) => `${key}="${escapeLabelValue(value)}"`)
     .join(',');
+}
+
+function recordDuration(
+  values: Map<string, DurationAggregate>,
+  key: string,
+  durationSeconds: number,
+): void {
+  const current = values.get(key) ?? { count: 0, sum: 0 };
+  values.set(key, {
+    count: current.count + 1,
+    sum: current.sum + durationSeconds,
+  });
 }
 
 function renderCounter(name: string, values: Map<string, number>): string[] {

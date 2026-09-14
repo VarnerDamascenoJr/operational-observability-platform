@@ -253,9 +253,13 @@ describe('demo transaction endpoint', () => {
     );
   });
 
-  it('exports RED metrics in Prometheus text format', async () => {
+  it('exports technical RED and demo business metrics in Prometheus text format', async () => {
     await app.inject({ method: 'GET', url: '/demo/transactions' });
     await app.inject({ method: 'GET', url: '/demo/transactions?outcome=error' });
+    await app.inject({
+      method: 'GET',
+      url: '/demo/transactions?dependency=slow&delayMs=1&asyncMs=1',
+    });
 
     const response = await app.inject({ method: 'GET', url: '/metrics' });
 
@@ -265,6 +269,11 @@ describe('demo transaction endpoint', () => {
     expect(response.body).toContain('http_request_duration_seconds_count');
     expect(response.body).toContain('route="/demo/transactions"');
     expect(response.body).toContain('status="503"');
+    expect(response.body).toContain('demo_transactions_total');
+    expect(response.body).toContain('demo_transaction_duration_seconds_count');
+    expect(response.body).toContain('outcome="success"');
+    expect(response.body).toContain('outcome="error"');
+    expect(response.body).toContain('dependency_mode="slow"');
   });
 });
 

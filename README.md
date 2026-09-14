@@ -77,10 +77,16 @@ O login local do Grafana e `admin` / `admin`. Essas credenciais sao somente
 para desenvolvimento local. Todas as portas sao vinculadas a `127.0.0.1` e nao
 ficam acessiveis por outras maquinas da rede.
 
-O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki. O
-Collector recebe dados OTLP e encaminha traces para o Tempo, metricas para o
-Prometheus e logs para o Loki. A retencao local de traces, logs e metricas e de
-24 horas.
+O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki e os
+dashboards `Operational Observability - Service Technical` e
+`Operational Observability - Demo Business Transactions`. O Collector recebe
+dados OTLP e encaminha traces para o Tempo, metricas para o Prometheus e logs
+para o Loki. A retencao local de traces, logs e metricas e de 24 horas.
+
+O roteiro manual de investigacao esta em
+[`docs/dashboard-investigation.md`](docs/dashboard-investigation.md). Ele mostra
+como partir de throughput, erro ou latencia, abrir traces no Tempo e consultar
+logs correlacionados no Loki pelo mesmo `trace_id`.
 
 Para acompanhar a inicializacao:
 
@@ -91,11 +97,12 @@ npm run validate:observability
 npm run smoke:observability
 ```
 
-`validate:observability` verifica as configuracoes do Compose, Collector e
-Prometheus. `smoke:observability` verifica ingestao OTLP, persistencia de trace
-no Tempo, persistencia de log correlacionado no Loki, scrape do Collector pelo
-Prometheus, provisionamento das fontes no Grafana e uma chamada real ao endpoint
-`/demo/transactions` exportando trace/log correlacionados para o Collector.
+`validate:observability` verifica as configuracoes do Compose, Collector,
+Prometheus e dashboards provisionados. `smoke:observability` verifica ingestao
+OTLP, persistencia de trace no Tempo, persistencia de log correlacionado no
+Loki, scrape do Collector pelo Prometheus, provisionamento das fontes e
+dashboards no Grafana e chamadas reais ao endpoint `/demo/transactions`
+exportando trace/log correlacionados e metricas de sucesso, falha e degradacao.
 
 ## Qualidade
 
@@ -116,5 +123,5 @@ check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 
 ## Proximo marco
 
-Instrumentar uma API de demonstracao para produzir metricas, logs e traces
-correlacionados para esta stack.
+Modelar SLOs, SLIs e error budget no PostgreSQL usando a telemetria demonstrada
+nos dashboards como base operacional.
