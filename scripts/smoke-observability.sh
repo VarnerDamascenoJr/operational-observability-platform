@@ -115,7 +115,7 @@ curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/d
 for _ in $(seq 1 10); do
   dashboard_uids=$(curl --fail --silent --show-error --user admin:admin     'http://localhost:3001/api/search?type=dash-db' |
     jq --raw-output '[.[].uid] | join(" ")')
-  if [[ " $dashboard_uids " == *" oop-service-technical "* && " $dashboard_uids " == *" oop-demo-business "* && " $dashboard_uids " == *" oop-sales-event-journey "* ]]; then
+  if [[ " $dashboard_uids " == *" oop-service-technical "* && " $dashboard_uids " == *" oop-demo-business "* && " $dashboard_uids " == *" oop-sales-event-journey "* && " $dashboard_uids " == *" oop-optiflow-execution "* ]]; then
     break
   fi
   sleep 1
@@ -127,6 +127,8 @@ curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/d
   jq --exit-status '.dashboard.title == "Operational Observability - Demo Business Transactions"' >/dev/null
 curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/dashboards/uid/oop-sales-event-journey |
   jq --exit-status '.dashboard.title == "Operational Observability - Sales Event Journey"' >/dev/null
+curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/dashboards/uid/oop-optiflow-execution |
+  jq --exit-status '.dashboard.title == "Operational Observability - OptiFlow Execution"' >/dev/null
 
 curl --fail --silent --show-error --get \
   --data-urlencode 'query=up{job="otel-collector"}' \

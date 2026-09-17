@@ -1,0 +1,459 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "title": "Logs por correlacao",
+      "url": "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bservice_name%3D%5C%22%24service%5C%22%7D%20%7C%20json%20%7C%20correlation_id%3D%5C%22%24correlation_id%5C%22%22%7D%5D%7D",
+      "targetBlank": false
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Execucoes por status",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (status, strategy) (increase(optiflow_optimization_runs_total{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\"}[$__range]))",
+          "legendFormat": "{{status}} {{strategy}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "description": "Total de execucoes do OptiFlow agrupadas por status e estrategia."
+    },
+    {
+      "id": 2,
+      "title": "Duracao da execucao",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (scenario_id, strategy, status) (optiflow_optimization_run_duration_seconds{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "{{scenario_id}} {{strategy}} {{status}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Ultima duracao observada por cenario, estrategia e status."
+    },
+    {
+      "id": 3,
+      "title": "Custo do plano",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(optiflow_optimization_plan_cost{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "cost",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Custo total do ultimo plano observado."
+    },
+    {
+      "id": 4,
+      "title": "Distancia",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 6,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(optiflow_optimization_plan_distance{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "distance",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Distancia total do plano."
+    },
+    {
+      "id": 5,
+      "title": "Atraso",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(optiflow_optimization_plan_late_minutes{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "late minutes",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m"
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Minutos de atraso do ultimo plano observado."
+    },
+    {
+      "id": 6,
+      "title": "Pedidos nao alocados",
+      "type": "stat",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max(optiflow_optimization_plan_unassigned_orders{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "unassigned",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "description": "Pedidos que ficaram fora do plano."
+    },
+    {
+      "id": 7,
+      "title": "Fila local",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "optiflow_optimization_queue_depth{service=~\"$service\", environment=~\"$environment\"}",
+          "legendFormat": "queued",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "optiflow_optimization_active_runs{service=~\"$service\", environment=~\"$environment\"}",
+          "legendFormat": "active",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "description": "Profundidade da fila e execucoes ativas no processo local."
+    },
+    {
+      "id": 8,
+      "title": "Custo por estrategia",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (scenario_id, strategy) (optiflow_optimization_plan_cost{service=~\"$service\", environment=~\"$environment\", strategy=~\"$strategy\", scenario_id=~\"$scenario_id\"})",
+          "legendFormat": "{{scenario_id}} {{strategy}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "description": "Custo observado para comparar estrategias e cenarios."
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["portfolio", "observability", "optiflow", "optimization"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "optiflow-api",
+          "value": "optiflow-api"
+        },
+        "hide": 0,
+        "label": "Service",
+        "name": "service",
+        "options": [],
+        "query": "label_values(optiflow_optimization_runs_total, service)",
+        "refresh": 1,
+        "regex": "",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        }
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "local",
+          "value": "local"
+        },
+        "hide": 0,
+        "label": "Environment",
+        "name": "environment",
+        "options": [],
+        "query": "label_values(optiflow_optimization_runs_total{service=~\"$service\"}, environment)",
+        "refresh": 1,
+        "regex": "",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        }
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Strategy",
+        "name": "strategy",
+        "options": [],
+        "query": "label_values(optiflow_optimization_runs_total{service=~\"$service\", environment=~\"$environment\"}, strategy)",
+        "refresh": 1,
+        "regex": "",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        }
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Scenario",
+        "name": "scenario_id",
+        "options": [],
+        "query": "label_values(optiflow_optimization_run_duration_seconds{service=~\"$service\", environment=~\"$environment\"}, scenario_id)",
+        "refresh": 1,
+        "regex": "",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        }
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Correlation ID",
+        "name": "correlation_id",
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Operational Observability - OptiFlow Execution",
+  "uid": "oop-optiflow-execution",
+  "version": 1,
+  "weekStart": ""
+}

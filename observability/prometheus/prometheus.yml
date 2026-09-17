@@ -19,6 +19,14 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:3103']
 
+  - job_name: optiflow-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:3000']
+        labels:
+          service: optiflow-api
+          environment: local
+
   - job_name: sales-event-api
     metrics_path: /metrics
     static_configs:

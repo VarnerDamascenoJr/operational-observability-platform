@@ -93,9 +93,11 @@ O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki e os
 dashboards `Operational Observability - Service Technical` e
 `Operational Observability - Demo Business Transactions`, alem do dashboard
 `Operational Observability - Sales Event Journey` para acompanhar venda,
-pagamento, outbox, tickets, email e check-in. O Collector recebe dados OTLP e
-encaminha traces para o Tempo, metricas para o Prometheus e logs para o Loki. A
-retencao local de traces, logs e metricas e de 24 horas.
+pagamento, outbox, tickets, email e check-in, e do dashboard
+`Operational Observability - OptiFlow Execution` para acompanhar execucoes de
+otimizacao. O Collector recebe dados OTLP e encaminha traces para o Tempo,
+metricas para o Prometheus e logs para o Loki. A retencao local de traces, logs
+e metricas e de 24 horas.
 
 O roteiro manual de investigacao esta em
 [`docs/dashboard-investigation.md`](docs/dashboard-investigation.md). Ele mostra
@@ -109,6 +111,10 @@ coleta os targets `sales-event-api`, `sales-event-worker` e
 `sales-event-email-retry-worker`. O roteiro de investigacao do dashboard de
 vendas esta em
 [`docs/sales-journey-investigation.md`](docs/sales-journey-investigation.md).
+
+Para receber metricas reais do `OptiFlow`, use
+[`docs/optiflow-execution-metrics.md`](docs/optiflow-execution-metrics.md). O
+Prometheus coleta o target `optiflow-api` em `host.docker.internal:3000`.
 
 Para acompanhar a inicializacao:
 
