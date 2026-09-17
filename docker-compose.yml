@@ -30,6 +30,9 @@ services:
         condition: service_healthy
       loki:
         condition: service_healthy
+    networks:
+      - default
+      - sales-event-observability
 
   prometheus:
     image: prom/prometheus:v3.2.1
@@ -49,6 +52,9 @@ services:
     depends_on:
       otel-collector:
         condition: service_started
+    networks:
+      - default
+      - sales-event-observability
     healthcheck:
       test: ['CMD', 'wget', '--spider', '--quiet', 'http://localhost:9090/-/ready']
       interval: 5s
@@ -119,3 +125,7 @@ volumes:
   tempo_data:
   loki_data:
   grafana_data:
+
+networks:
+  sales-event-observability:
+    name: operational-observability-network

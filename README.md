@@ -100,6 +100,12 @@ O roteiro manual de investigacao esta em
 como partir de throughput, erro ou latencia, abrir traces no Tempo e consultar
 logs correlacionados no Loki pelo mesmo `trace_id`.
 
+Para receber traces, logs e metricas reais do `sales-event-project`, use
+[`docs/sales-event-integration.md`](docs/sales-event-integration.md). A
+plataforma cria a rede compartilhada `operational-observability-network` e
+coleta os targets `sales-event-api`, `sales-event-worker` e
+`sales-event-email-retry-worker`.
+
 Para acompanhar a inicializacao:
 
 ```bash
