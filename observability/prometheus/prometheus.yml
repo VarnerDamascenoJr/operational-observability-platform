@@ -18,3 +18,30 @@ scrape_configs:
     metrics_path: /metrics
     static_configs:
       - targets: ['host.docker.internal:3103']
+
+  - job_name: sales-event-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['api:8080']
+        labels:
+          service: sales-event-api
+          environment: development
+    metric_relabel_configs:
+      - source_labels: [path]
+        target_label: route
+
+  - job_name: sales-event-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['worker:9091']
+        labels:
+          service: sales-event-worker
+          environment: development
+
+  - job_name: sales-event-email-retry-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['email-retry-worker:9092']
+        labels:
+          service: sales-event-email-retry-worker
+          environment: development
