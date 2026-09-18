@@ -91,9 +91,11 @@ ficam acessiveis por outras maquinas da rede.
 
 O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki e os
 dashboards `Operational Observability - Service Technical` e
-`Operational Observability - Demo Business Transactions`. O Collector recebe
-dados OTLP e encaminha traces para o Tempo, metricas para o Prometheus e logs
-para o Loki. A retencao local de traces, logs e metricas e de 24 horas.
+`Operational Observability - Demo Business Transactions`, alem do dashboard
+`Operational Observability - Sales Event Journey` para acompanhar venda,
+pagamento, outbox, tickets, email e check-in. O Collector recebe dados OTLP e
+encaminha traces para o Tempo, metricas para o Prometheus e logs para o Loki. A
+retencao local de traces, logs e metricas e de 24 horas.
 
 O roteiro manual de investigacao esta em
 [`docs/dashboard-investigation.md`](docs/dashboard-investigation.md). Ele mostra
@@ -104,7 +106,9 @@ Para receber traces, logs e metricas reais do `sales-event-project`, use
 [`docs/sales-event-integration.md`](docs/sales-event-integration.md). A
 plataforma cria a rede compartilhada `operational-observability-network` e
 coleta os targets `sales-event-api`, `sales-event-worker` e
-`sales-event-email-retry-worker`.
+`sales-event-email-retry-worker`. O roteiro de investigacao do dashboard de
+vendas esta em
+[`docs/sales-journey-investigation.md`](docs/sales-journey-investigation.md).
 
 Para acompanhar a inicializacao:
 
