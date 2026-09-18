@@ -116,6 +116,11 @@ Para receber metricas reais do `OptiFlow`, use
 [`docs/optiflow-execution-metrics.md`](docs/optiflow-execution-metrics.md). O
 Prometheus coleta o target `optiflow-api` em `host.docker.internal:3000`.
 
+O guia final de execucao local dos tres projetos esta em
+[`portfolio-local-execution.md`](https://github.com/VarnerDamascenoJr/OptiFlow/blob/main/docs/portfolio-local-execution.md),
+e os diagramas finais estao em
+[`portfolio-architecture-diagrams.md`](https://github.com/VarnerDamascenoJr/OptiFlow/blob/main/docs/portfolio-architecture-diagrams.md).
+
 Para acompanhar a inicializacao:
 
 ```bash
@@ -152,5 +157,6 @@ check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 
 ## Proximo marco
 
-Conectar traces reais do `sales-event-project` na plataforma e iniciar a
-narrativa integrada entre venda, alerta, incidente e investigacao.
+Ensaiar a demonstracao integrada completa e transformar o fluxo em roteiro de
+portfolio gravavel, cobrindo venda, investigacao operacional e execucao do
+OptiFlow.
