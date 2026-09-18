@@ -58,6 +58,10 @@ As regras Prometheus de alerta baseadas em sintomas cobrem erro HTTP alto,
 latencia HTTP alta e consumo de error budget. O runbook local esta em
 [`docs/symptom-alerts.md`](docs/symptom-alerts.md).
 
+A API de incidentes permite abrir, investigar e encerrar incidentes associados a
+servico, alerta e SLO. Ela preserva evidencias, hipoteses e linha do tempo da
+resposta. Consulte [`docs/incident-investigation.md`](docs/incident-investigation.md).
+
 ## Banco de dados
 
 As migrations SQL ficam em `migrations/` e seguem o formato
@@ -132,5 +136,5 @@ check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 
 ## Proximo marco
 
-Modelar incidentes, evidencias, hipoteses e linha do tempo para transformar
-alertas em investigacao guiada dentro da plataforma.
+Conectar traces reais do `sales-event-project` na plataforma e iniciar a
+narrativa integrada entre venda, alerta, incidente e investigacao.

@@ -192,3 +192,155 @@ test('SLO API configures objectives and calculates error budget state', async ({
     }),
   );
 });
+
+test('incident API preserves guided investigation state from alert to resolution', async ({
+  request,
+}) => {
+  const sloResponse = await request.post('/slos', {
+    data: {
+      project: {
+        slug: 'portfolio-observability',
+        name: 'Portfolio Observability',
+      },
+      service: {
+        slug: 'operational-observability-platform',
+        name: 'Operational Observability Platform',
+        environment: 'e2e',
+        owner: 'platform',
+      },
+      slug: 'incident-demo-slo',
+      name: 'Incident demo SLO',
+      windowDays: 7,
+      objectives: [
+        {
+          type: 'availability',
+          targetPercentage: 99,
+        },
+      ],
+    },
+  });
+  expect(sloResponse.status()).toBe(201);
+  const slo = (await sloResponse.json()) as { id: string };
+
+  const createIncidentResponse = await request.post('/incidents', {
+    data: {
+      project: {
+        slug: 'portfolio-observability',
+        name: 'Portfolio Observability',
+      },
+      service: {
+        slug: 'operational-observability-platform',
+        name: 'Operational Observability Platform',
+        environment: 'e2e',
+        owner: 'platform',
+      },
+      severity: 'page',
+      sloId: slo.id,
+      sourceAlert: {
+        fingerprint: 'alert-fingerprint-e2e',
+        name: 'OOPSloErrorBudgetBurn',
+        severity: 'page',
+      },
+      summary: 'The demo service spent its error budget during the e2e window.',
+      title: 'Demo transaction SLO burn',
+      evidence: [
+        {
+          title: 'Business dashboard breach panel',
+          type: 'dashboard',
+          url: 'http://localhost:3001/d/oop-demo-business',
+        },
+      ],
+      hypotheses: [
+        {
+          confidence: 'medium',
+          statement: 'The dependency unavailable mode is driving user-visible failures.',
+        },
+      ],
+    },
+  });
+
+  expect(createIncidentResponse.status()).toBe(201);
+  const created = (await createIncidentResponse.json()) as {
+    evidence: Array<{ title: string; type: string }>;
+    hypotheses: Array<{ statement: string }>;
+    id: string;
+    sloId: string;
+    sourceAlert: { name: string };
+    status: string;
+    timeline: Array<{ type: string }>;
+  };
+  expect(created.status).toBe('open');
+  expect(created.sloId).toBe(slo.id);
+  expect(created.sourceAlert.name).toBe('OOPSloErrorBudgetBurn');
+  expect(created.evidence).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ title: 'OOPSloErrorBudgetBurn', type: 'alert' }),
+      expect.objectContaining({ title: 'Business dashboard breach panel', type: 'dashboard' }),
+    ]),
+  );
+  expect(created.hypotheses).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        statement: 'The dependency unavailable mode is driving user-visible failures.',
+      }),
+    ]),
+  );
+  expect(created.timeline).toEqual(
+    expect.arrayContaining([expect.objectContaining({ type: 'opened' })]),
+  );
+
+  const investigatingResponse = await request.patch(`/incidents/${created.id}`, {
+    data: {
+      status: 'investigating',
+      summary: 'Responder confirmed user impact and started trace/log investigation.',
+    },
+  });
+
+  await expect(investigatingResponse).toBeOK();
+  await expect(investigatingResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      status: 'investigating',
+      summary: 'Responder confirmed user impact and started trace/log investigation.',
+    }),
+  );
+
+  const evidenceResponse = await request.post(`/incidents/${created.id}/evidence`, {
+    data: {
+      description: 'Trace shows the unavailable dependency span failing before the 503.',
+      title: 'Tempo trace for failed transaction',
+      type: 'trace',
+      url: 'http://localhost:3200/api/traces/abcdefabcdefabcdefabcdefabcdefab',
+    },
+  });
+  expect(evidenceResponse.status()).toBe(201);
+
+  const resolvedResponse = await request.patch(`/incidents/${created.id}`, {
+    data: {
+      preventiveActions: 'Keep the dependency unavailable runbook linked from the alert.',
+      rootCause: 'Controlled unavailable dependency mode exhausted the demonstration SLO.',
+      status: 'resolved',
+    },
+  });
+
+  await expect(resolvedResponse).toBeOK();
+  const resolved = (await resolvedResponse.json()) as {
+    preventiveActions: string;
+    resolvedAt: string;
+    rootCause: string;
+    status: string;
+    timeline: Array<{ title: string; type: string }>;
+  };
+  expect(resolved.status).toBe('resolved');
+  expect(resolved.resolvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(resolved.rootCause).toBe(
+    'Controlled unavailable dependency mode exhausted the demonstration SLO.',
+  );
+  expect(resolved.preventiveActions).toBe(
+    'Keep the dependency unavailable runbook linked from the alert.',
+  );
+  expect(resolved.timeline).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ title: 'Incident resolved', type: 'resolved' }),
+    ]),
+  );
+});
