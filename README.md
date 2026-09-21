@@ -1,5 +1,7 @@
 # Operational Observability Platform
 
+[![Continuous Integration](https://github.com/VarnerDamascenoJr/operational-observability-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/VarnerDamascenoJr/operational-observability-platform/actions/workflows/ci.yml)
+
 Plataforma de observabilidade operacional que centraliza configuracao de SLOs,
 alertas, regras de sampling, correlacao e investigacao de incidentes.
 
