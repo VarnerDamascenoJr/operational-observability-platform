@@ -1,5 +1,7 @@
 # Operational Observability Platform
 
+[![Continuous Integration](https://github.com/VarnerDamascenoJr/operational-observability-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/VarnerDamascenoJr/operational-observability-platform/actions/workflows/ci.yml)
+
 Plataforma de observabilidade operacional que centraliza configuracao de SLOs,
 alertas, regras de sampling, correlacao e investigacao de incidentes.
 
@@ -139,6 +141,10 @@ provisionamento das fontes e dashboards no Grafana, chamadas reais ao endpoint
 alertas de erro, latencia e error budget disparados.
 
 ## Qualidade
+
+O CI do repositorio roda `npm run check`, `npm run validate:observability` e
+`npm run smoke:observability` no workflow
+[`Continuous Integration`](https://github.com/VarnerDamascenoJr/operational-observability-platform/actions/workflows/ci.yml).
 
 ```bash
 npm run lint
