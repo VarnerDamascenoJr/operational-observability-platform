@@ -35,7 +35,9 @@ wait_for_url() {
 
 trap cleanup EXIT
 
-docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null
+if ! docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null; then
+  docker compose ps
+fi
 wait_for_url 'http://localhost:13133/'
 wait_for_url 'http://localhost:9090/-/ready'
 wait_for_url 'http://localhost:3200/ready'
