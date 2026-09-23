@@ -279,6 +279,7 @@ printf '%s' "$metrics_body" | grep 'outcome="success"' >/dev/null
 printf '%s' "$metrics_body" | grep 'outcome="error"' >/dev/null
 printf '%s' "$metrics_body" | grep 'dependency_mode="slow"' >/dev/null
 printf '%s' "$metrics_body" | grep 'slo_error_budget_consumed_percentage' >/dev/null
+printf '%s' "$metrics_body" | grep 'slo_error_budget_burn_rate' >/dev/null
 
 for _ in $(seq 1 16); do
   firing_alerts=$(curl --fail --silent --show-error http://localhost:9090/api/v1/alerts)
