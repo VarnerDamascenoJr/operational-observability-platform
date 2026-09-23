@@ -133,6 +133,30 @@ test('SLO API configures objectives and calculates error budget state', async ({
     }),
   );
 
+  const earlierEvaluationResponse = await request.post(`/slos/${created.id}/evaluations`, {
+    data: {
+      windowStartedAt: '2026-09-12T00:00:00.000Z',
+      windowEndedAt: '2026-09-13T00:00:00.000Z',
+      indicators: {
+        availability: {
+          totalEvents: 1_000,
+          goodEvents: 990,
+        },
+        latency: {
+          totalEvents: 1_000,
+          goodEvents: 980,
+        },
+      },
+      source: {
+        kind: 'fixture',
+        period: '1d',
+        query: 'fixtures/slo/demo-transaction-windows.json',
+      },
+    },
+  });
+
+  expect(earlierEvaluationResponse.status()).toBe(201);
+
   const evaluationResponse = await request.post(`/slos/${created.id}/evaluations`, {
     data: {
       windowStartedAt: '2026-09-13T00:00:00.000Z',
@@ -146,6 +170,11 @@ test('SLO API configures objectives and calculates error budget state', async ({
           totalEvents: 1_000,
           goodEvents: 940,
         },
+      },
+      source: {
+        kind: 'fixture',
+        period: '1d',
+        query: 'fixtures/slo/demo-transaction-windows.json',
       },
     },
   });
@@ -189,6 +218,65 @@ test('SLO API configures objectives and calculates error budget state', async ({
         startedAt: '2026-09-13T00:00:00.000Z',
         endedAt: '2026-09-14T00:00:00.000Z',
       },
+    }),
+  );
+
+  const rollingWindowsResponse = await request.get(`/slos/${created.id}/rolling-windows?limit=2`);
+
+  await expect(rollingWindowsResponse).toBeOK();
+  await expect(rollingWindowsResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      limit: 2,
+      overallStatus: 'breached',
+      objectives: expect.arrayContaining([
+        expect.objectContaining({
+          summary: expect.objectContaining({
+            averageObservedPercentage: 99.25,
+            breachedWindows: 0,
+            evaluatedWindows: 2,
+            latestStatus: 'ok',
+            latestWindowEndedAt: '2026-09-14T00:00:00.000Z',
+            maxErrorBudgetConsumedPercentage: 100,
+            minObservedPercentage: 99,
+            totalBadEvents: 15,
+            totalEvents: 2_000,
+            totalGoodEvents: 1_985,
+          }),
+          type: 'availability',
+          windows: [
+            expect.objectContaining({
+              endedAt: '2026-09-13T00:00:00.000Z',
+              observedPercentage: 99,
+              source: {
+                kind: 'fixture',
+                period: '1d',
+                query: 'fixtures/slo/demo-transaction-windows.json',
+              },
+              status: 'ok',
+            }),
+            expect.objectContaining({
+              endedAt: '2026-09-14T00:00:00.000Z',
+              observedPercentage: 99.5,
+              source: {
+                kind: 'fixture',
+                period: '1d',
+                query: 'fixtures/slo/demo-transaction-windows.json',
+              },
+              status: 'ok',
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          summary: expect.objectContaining({
+            breachedWindows: 1,
+            evaluatedWindows: 2,
+            latestStatus: 'breached',
+            maxErrorBudgetConsumedPercentage: 120,
+            minObservedPercentage: 94,
+          }),
+          type: 'latency',
+        }),
+      ]),
     }),
   );
 });

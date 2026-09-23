@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { calculateSliEvaluation, overallSloStatus, renderSloPrometheusMetrics } from './slo.js';
+import {
+  calculateSliEvaluation,
+  overallSloStatus,
+  renderSloPrometheusMetrics,
+  summarizeRollingWindows,
+} from './slo.js';
 import type { SqlExecutor } from './database/postgres.js';
 import type { QueryResult, QueryResultRow } from 'pg';
 
@@ -75,6 +80,67 @@ describe('SLO calculations', () => {
     expect(overallSloStatus([{ status: 'ok' }, { status: 'ok' }])).toBe('ok');
     expect(overallSloStatus([{ status: 'ok' }, { status: 'no_data' }])).toBe('no_data');
     expect(overallSloStatus([{ status: 'ok' }, { status: 'breached' }])).toBe('breached');
+  });
+
+  it('summarizes rolling SLI windows for trend analysis', () => {
+    expect(
+      summarizeRollingWindows([
+        {
+          badEvents: 10,
+          endedAt: '2026-09-13T00:00:00.000Z',
+          errorBudgetConsumedPercentage: 100,
+          errorBudgetRemainingPercentage: 0,
+          errorBudgetTotalEvents: 10,
+          goodEvents: 990,
+          observedPercentage: 99,
+          source: { kind: 'fixture', period: '1d', query: 'fixtures/slo/windows.json' },
+          startedAt: '2026-09-12T00:00:00.000Z',
+          status: 'ok',
+          targetPercentage: 99,
+          totalEvents: 1_000,
+        },
+        {
+          badEvents: 0,
+          endedAt: '2026-09-14T00:00:00.000Z',
+          errorBudgetConsumedPercentage: null,
+          errorBudgetRemainingPercentage: null,
+          errorBudgetTotalEvents: null,
+          goodEvents: 0,
+          observedPercentage: null,
+          source: { kind: 'fixture', period: '1d', query: 'fixtures/slo/windows.json' },
+          startedAt: '2026-09-13T00:00:00.000Z',
+          status: 'no_data',
+          targetPercentage: 99,
+          totalEvents: 0,
+        },
+        {
+          badEvents: 20,
+          endedAt: '2026-09-15T00:00:00.000Z',
+          errorBudgetConsumedPercentage: 200,
+          errorBudgetRemainingPercentage: -100,
+          errorBudgetTotalEvents: 10,
+          goodEvents: 980,
+          observedPercentage: 98,
+          source: { kind: 'fixture', period: '1d', query: 'fixtures/slo/windows.json' },
+          startedAt: '2026-09-14T00:00:00.000Z',
+          status: 'breached',
+          targetPercentage: 99,
+          totalEvents: 1_000,
+        },
+      ]),
+    ).toEqual({
+      averageObservedPercentage: 98.5,
+      breachedWindows: 1,
+      evaluatedWindows: 3,
+      latestStatus: 'breached',
+      latestWindowEndedAt: '2026-09-15T00:00:00.000Z',
+      maxErrorBudgetConsumedPercentage: 200,
+      minObservedPercentage: 98,
+      noDataWindows: 1,
+      totalBadEvents: 30,
+      totalEvents: 2_000,
+      totalGoodEvents: 1_970,
+    });
   });
 });
 

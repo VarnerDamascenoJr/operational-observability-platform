@@ -11,6 +11,7 @@ api_base_url="http://127.0.0.1:${api_port}"
 api_log_file="$(mktemp)"
 start_time=$(date +%s%N)
 end_time=$((start_time + 1000000))
+wait_attempts="${SMOKE_WAIT_ATTEMPTS:-60}"
 
 cleanup() {
   if [ -n "${api_pid:-}" ]; then
@@ -19,17 +20,44 @@ cleanup() {
   fi
 }
 
+wait_for_url() {
+  local url="$1"
+
+  for _ in $(seq 1 "$wait_attempts"); do
+    if curl --fail --silent --show-error "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+
+  curl --fail --silent --show-error "$url" >/dev/null
+}
+
 trap cleanup EXIT
 
-docker compose up -d --wait postgres otel-collector prometheus tempo loki grafana >/dev/null
+docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null
+wait_for_url 'http://localhost:13133/'
+wait_for_url 'http://localhost:9090/-/ready'
+wait_for_url 'http://localhost:3200/ready'
+wait_for_url 'http://localhost:3100/ready'
+wait_for_url 'http://localhost:3001/api/health'
 npm run build >/dev/null
-DATABASE_URL="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}" npm run db:migrate >/dev/null
+database_url="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}"
+migration_succeeded=0
+for _ in $(seq 1 "$wait_attempts"); do
+  if DATABASE_URL="$database_url" npm run db:migrate >/dev/null 2>&1; then
+    migration_succeeded=1
+    break
+  fi
+  sleep 1
+done
+test "$migration_succeeded" = '1'
 
 NODE_ENV=production \
   LOG_LEVEL=info \
   OTEL_ENABLED=true \
   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-  DATABASE_URL="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}" \
+  DATABASE_URL="$database_url" \
   PORT="$api_port" \
   HOST=0.0.0.0 \
   node dist/server.js >"$api_log_file" 2>&1 &
