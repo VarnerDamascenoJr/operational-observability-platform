@@ -73,6 +73,11 @@ curl --request POST 'http://localhost:3000/slos/<slo-id>/evaluations' \
         "totalEvents": 1000,
         "goodEvents": 940
       }
+    },
+    "source": {
+      "kind": "fixture",
+      "query": "fixtures/slo/demo-transaction-windows.json",
+      "period": "1d"
     }
   }'
 ```
@@ -86,6 +91,10 @@ error_budget_total_events = total_events * (1 - target_percentage / 100)
 error_budget_consumed_percentage = bad_events / error_budget_total_events * 100
 error_budget_remaining_percentage = 100 - error_budget_consumed_percentage
 ```
+
+`source.kind` identifica se as contagens vieram de entrada `manual`, fixture
+temporal (`fixture`) ou consulta Prometheus (`prometheus`). `source.query` e
+`source.period` preservam a referencia reproduzivel que gerou a janela.
 
 Se `totalEvents` for zero, o status do SLI fica `no_data` e percentuais de
 observacao e error budget ficam nulos. Se o percentual observado ficar abaixo do
@@ -102,3 +111,25 @@ O estado geral do SLO e:
 - `breached` quando qualquer SLI esta violado;
 - `no_data` quando nao ha janela avaliada ou algum SLI ainda nao possui dados;
 - `ok` quando todos os SLIs avaliados cumprem seus alvos.
+
+## Consultar janelas rolantes
+
+```bash
+curl 'http://localhost:3000/slos/<slo-id>/rolling-windows?limit=14'
+```
+
+A resposta retorna, para cada SLI, as ultimas janelas avaliadas em ordem
+cronologica e um resumo estatistico para acompanhar tendencia operacional:
+
+- `averageObservedPercentage`: media dos percentuais observados nas janelas com
+  dados;
+- `minObservedPercentage`: pior percentual observado na serie;
+- `maxErrorBudgetConsumedPercentage`: maior consumo de error budget observado;
+- `breachedWindows` e `noDataWindows`: quantidade de janelas violadas ou sem
+  dados;
+- `totalEvents`, `totalGoodEvents` e `totalBadEvents`: volume acumulado da serie;
+- `source`: origem reproduzivel usada para calcular cada janela.
+
+O `overallStatus` dessa consulta considera o status mais recente de cada SLI.
+Assim, a plataforma separa duas leituras: o estado atual do SLO e a trajetoria
+recente que levou ate ele.

@@ -6,6 +6,13 @@ import { slugPattern, uuidPattern } from './validation/patterns.js';
 
 export type SliType = 'availability' | 'latency';
 export type SliStatus = 'breached' | 'no_data' | 'ok';
+export type EvaluationSourceKind = 'fixture' | 'manual' | 'prometheus';
+
+export interface EvaluationSource {
+  kind: EvaluationSourceKind;
+  period?: string;
+  query?: string;
+}
 
 export interface SliObjectiveInput {
   latencyThresholdMilliseconds?: number;
@@ -93,8 +100,44 @@ export interface SloEvaluationResponse {
   };
 }
 
+export interface RollingSliWindow extends SliEvaluationResult {
+  endedAt: string;
+  source: EvaluationSource;
+  startedAt: string;
+}
+
+export interface RollingSliSummary {
+  averageObservedPercentage: number | null;
+  breachedWindows: number;
+  evaluatedWindows: number;
+  latestStatus: SliStatus;
+  latestWindowEndedAt: string | null;
+  maxErrorBudgetConsumedPercentage: number | null;
+  minObservedPercentage: number | null;
+  noDataWindows: number;
+  totalBadEvents: number;
+  totalEvents: number;
+  totalGoodEvents: number;
+}
+
+export interface RollingObjectiveResult {
+  latencyThresholdMilliseconds?: number;
+  summary: RollingSliSummary;
+  targetPercentage: number;
+  type: SliType;
+  windows: RollingSliWindow[];
+}
+
+export interface SloRollingWindowsResponse {
+  limit: number;
+  objectives: RollingObjectiveResult[];
+  overallStatus: SliStatus;
+  slo: SloDefinition;
+}
+
 interface CreateEvaluationInput {
   indicators: Partial<Record<SliType, SliEventCounts>>;
+  source: EvaluationSource;
   windowEndedAt: string;
   windowStartedAt: string;
 }
@@ -144,6 +187,23 @@ interface LatestEvaluationRow extends QueryResultRow {
   total_events: string;
   window_ended_at: Date;
   window_started_at: Date;
+}
+
+interface RollingEvaluationRow extends QueryResultRow {
+  error_budget_consumed_percentage: string | null;
+  error_budget_remaining_percentage: string | null;
+  error_budget_total_events: string | null;
+  good_events: string | null;
+  indicator_type: SliType;
+  latency_threshold_ms: number | null;
+  observed_percentage: string | null;
+  source_kind: EvaluationSourceKind | null;
+  source_period: string | null;
+  source_query: string | null;
+  status: SliStatus | null;
+  total_events: string | null;
+  window_ended_at: Date | null;
+  window_started_at: Date | null;
 }
 
 interface SloMetricRow extends QueryResultRow {
@@ -213,6 +273,39 @@ export function overallSloStatus(
   }
 
   return 'ok';
+}
+
+export function summarizeRollingWindows(windows: readonly RollingSliWindow[]): RollingSliSummary {
+  const observedPercentages = windows.flatMap((window) =>
+    window.observedPercentage === null ? [] : [window.observedPercentage],
+  );
+  const errorBudgetConsumptions = windows.flatMap((window) =>
+    window.errorBudgetConsumedPercentage === null ? [] : [window.errorBudgetConsumedPercentage],
+  );
+  const latestWindow = windows.at(-1);
+
+  return {
+    averageObservedPercentage:
+      observedPercentages.length === 0
+        ? null
+        : round(
+            observedPercentages.reduce((total, value) => total + value, 0) /
+              observedPercentages.length,
+            5,
+          ),
+    breachedWindows: windows.filter((window) => window.status === 'breached').length,
+    evaluatedWindows: windows.length,
+    latestStatus: latestWindow?.status ?? 'no_data',
+    latestWindowEndedAt: latestWindow?.endedAt ?? null,
+    maxErrorBudgetConsumedPercentage:
+      errorBudgetConsumptions.length === 0 ? null : Math.max(...errorBudgetConsumptions),
+    minObservedPercentage:
+      observedPercentages.length === 0 ? null : Math.min(...observedPercentages),
+    noDataWindows: windows.filter((window) => window.status === 'no_data').length,
+    totalBadEvents: windows.reduce((total, window) => total + window.badEvents, 0),
+    totalEvents: windows.reduce((total, window) => total + window.totalEvents, 0),
+    totalGoodEvents: windows.reduce((total, window) => total + window.goodEvents, 0),
+  };
 }
 
 export async function renderSloPrometheusMetrics(database: SqlExecutor): Promise<string> {
@@ -359,6 +452,34 @@ export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | 
       const sloId = parseSloId(request.params);
       const repository = new SloRepository(database);
       const response = await repository.latestStatus(sloId);
+
+      if (!response) {
+        void reply.code(404);
+        return { error: 'SLO not found' };
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        void reply.code(400);
+        return { error: error.message };
+      }
+
+      throw error;
+    }
+  });
+
+  app.get('/slos/:sloId/rolling-windows', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to read SLO rolling windows' };
+    }
+
+    try {
+      const sloId = parseSloId(request.params);
+      const limit = parseRollingWindowLimit(request.query);
+      const repository = new SloRepository(database);
+      const response = await repository.rollingWindows(sloId, limit);
 
       if (!response) {
         void reply.code(404);
@@ -559,6 +680,123 @@ class SloRepository {
     };
   }
 
+  async rollingWindows(
+    sloId: string,
+    limit: number,
+  ): Promise<SloRollingWindowsResponse | undefined> {
+    const slo = await this.findById(sloId);
+
+    if (!slo) {
+      return undefined;
+    }
+
+    const result = await this.database.query<RollingEvaluationRow>(
+      `SELECT
+         sli.indicator_type,
+         sli.latency_threshold_ms,
+         ew.window_started_at,
+         ew.window_ended_at,
+         ew.total_events,
+         ew.good_events,
+         ew.observed_percentage,
+         ew.error_budget_total_events,
+         ew.error_budget_consumed_percentage,
+         ew.error_budget_remaining_percentage,
+         ew.source_kind,
+         ew.source_query,
+         ew.source_period,
+         ew.status
+       FROM control_plane.sli_definitions sli
+       LEFT JOIN LATERAL (
+         SELECT
+           window_started_at,
+           window_ended_at,
+           total_events,
+           good_events,
+           observed_percentage,
+           error_budget_total_events,
+           error_budget_consumed_percentage,
+           error_budget_remaining_percentage,
+           source_kind,
+           source_query,
+           source_period,
+           status
+         FROM control_plane.sli_evaluation_windows evaluation_window
+         WHERE evaluation_window.sli_id = sli.id
+         ORDER BY evaluation_window.window_ended_at DESC
+         LIMIT $2
+       ) ew ON true
+       WHERE sli.slo_id = $1
+       ORDER BY sli.indicator_type, ew.window_ended_at ASC NULLS LAST`,
+      [sloId, limit],
+    );
+    const rowsByType = new Map<SliType, RollingEvaluationRow[]>();
+
+    for (const row of result.rows) {
+      const rows = rowsByType.get(row.indicator_type) ?? [];
+      rows.push(row);
+      rowsByType.set(row.indicator_type, rows);
+    }
+
+    const objectives = slo.objectives.map((objective): RollingObjectiveResult => {
+      const rows = rowsByType.get(objective.type) ?? [];
+      const windows = rows.flatMap((row): RollingSliWindow[] => {
+        if (
+          !row.window_started_at ||
+          !row.window_ended_at ||
+          row.total_events === null ||
+          row.good_events === null ||
+          row.status === null
+        ) {
+          return [];
+        }
+
+        const totalEvents = Number(row.total_events);
+        const goodEvents = Number(row.good_events);
+
+        return [
+          {
+            badEvents: totalEvents - goodEvents,
+            endedAt: row.window_ended_at.toISOString(),
+            errorBudgetConsumedPercentage: nullableNumber(row.error_budget_consumed_percentage),
+            errorBudgetRemainingPercentage: nullableNumber(row.error_budget_remaining_percentage),
+            errorBudgetTotalEvents: nullableNumber(row.error_budget_total_events),
+            goodEvents,
+            observedPercentage: nullableNumber(row.observed_percentage),
+            source: {
+              kind: row.source_kind ?? 'manual',
+              ...(row.source_period ? { period: row.source_period } : {}),
+              ...(row.source_query ? { query: row.source_query } : {}),
+            },
+            startedAt: row.window_started_at.toISOString(),
+            status: row.status,
+            targetPercentage: objective.targetPercentage,
+            totalEvents,
+          },
+        ];
+      });
+
+      return {
+        ...(objective.latencyThresholdMilliseconds
+          ? { latencyThresholdMilliseconds: objective.latencyThresholdMilliseconds }
+          : {}),
+        summary: summarizeRollingWindows(windows),
+        targetPercentage: objective.targetPercentage,
+        type: objective.type,
+        windows,
+      };
+    });
+
+    return {
+      limit,
+      objectives,
+      overallStatus: overallSloStatus(
+        objectives.map((objective) => ({ status: objective.summary.latestStatus })),
+      ),
+      slo,
+    };
+  }
+
   private async findById(id: string): Promise<SloDefinition | undefined> {
     const result = await this.database.query<SloRow>(selectSloDefinitionsSql('WHERE slo.id = $1'), [
       id,
@@ -586,8 +824,11 @@ class SloRepository {
          error_budget_total_events,
          error_budget_consumed_percentage,
          error_budget_remaining_percentage,
+         source_kind,
+         source_query,
+         source_period,
          status
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        ON CONFLICT (sli_id, window_started_at, window_ended_at) DO UPDATE SET
          total_events = EXCLUDED.total_events,
          good_events = EXCLUDED.good_events,
@@ -596,6 +837,9 @@ class SloRepository {
          error_budget_total_events = EXCLUDED.error_budget_total_events,
          error_budget_consumed_percentage = EXCLUDED.error_budget_consumed_percentage,
          error_budget_remaining_percentage = EXCLUDED.error_budget_remaining_percentage,
+         source_kind = EXCLUDED.source_kind,
+         source_query = EXCLUDED.source_query,
+         source_period = EXCLUDED.source_period,
          status = EXCLUDED.status,
          updated_at = now()`,
       [
@@ -610,6 +854,9 @@ class SloRepository {
         result.errorBudgetTotalEvents,
         result.errorBudgetConsumedPercentage,
         result.errorBudgetRemainingPercentage,
+        input.source.kind,
+        input.source.query ?? null,
+        input.source.period ?? null,
         result.status,
       ],
     );
@@ -738,8 +985,28 @@ function parseEvaluationInput(value: unknown): CreateEvaluationInput {
       availability: parseOptionalCounts(indicators.availability, 'indicators.availability'),
       latency: parseOptionalCounts(indicators.latency, 'indicators.latency'),
     },
+    source: parseEvaluationSource(body.source),
     windowEndedAt,
     windowStartedAt,
+  };
+}
+
+function parseEvaluationSource(value: unknown): EvaluationSource {
+  if (value === undefined) {
+    return { kind: 'manual' };
+  }
+
+  const source = requireRecord(value, 'source must be an object');
+  const kind = requiredString(source.kind, 'source.kind');
+
+  if (kind !== 'manual' && kind !== 'fixture' && kind !== 'prometheus') {
+    throw new ValidationError('source.kind must be manual, fixture or prometheus');
+  }
+
+  return {
+    kind,
+    period: optionalString(source.period, 'source.period'),
+    query: optionalString(source.query, 'source.query'),
   };
 }
 
@@ -793,6 +1060,20 @@ function parseSloId(value: unknown): string {
   }
 
   return sloId;
+}
+
+function parseRollingWindowLimit(value: unknown): number {
+  const query = requireRecord(value, 'Query params must be an object');
+  const rawLimit = query.limit;
+
+  if (rawLimit === undefined) {
+    return 14;
+  }
+
+  const limit =
+    typeof rawLimit === 'string' && rawLimit.trim() !== '' ? Number(rawLimit) : rawLimit;
+
+  return requiredInteger(limit, 'limit', { maximum: 90, minimum: 1 });
 }
 
 function mapSloDefinition(row: SloRow): SloDefinition {
