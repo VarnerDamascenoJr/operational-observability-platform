@@ -279,6 +279,47 @@ test('SLO API configures objectives and calculates error budget state', async ({
       ]),
     }),
   );
+
+  const burnRateResponse = await request.get(
+    `/slos/${created.id}/burn-rate?shortWindows=1&longWindows=2`,
+  );
+
+  await expect(burnRateResponse).toBeOK();
+  await expect(burnRateResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      longWindowCount: 2,
+      overallSeverity: 'page',
+      shortWindowCount: 1,
+      objectives: expect.arrayContaining([
+        expect.objectContaining({
+          longWindow: expect.objectContaining({
+            burnRate: 2.625,
+            errorBudgetConsumedPercentage: 75,
+            expectedBudgetConsumedPercentage: 28.571,
+          }),
+          severity: 'warning',
+          shortWindow: expect.objectContaining({
+            burnRate: 3.5,
+            errorBudgetConsumedPercentage: 50,
+          }),
+          type: 'availability',
+        }),
+        expect.objectContaining({
+          longWindow: expect.objectContaining({
+            burnRate: 2.8,
+            errorBudgetConsumedPercentage: 80,
+            expectedBudgetConsumedPercentage: 28.571,
+          }),
+          severity: 'page',
+          shortWindow: expect.objectContaining({
+            burnRate: 8.4,
+            errorBudgetConsumedPercentage: 120,
+          }),
+          type: 'latency',
+        }),
+      ]),
+    }),
+  );
 });
 
 test('incident API preserves guided investigation state from alert to resolution', async ({

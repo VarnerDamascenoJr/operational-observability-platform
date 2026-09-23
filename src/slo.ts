@@ -7,6 +7,7 @@ import { slugPattern, uuidPattern } from './validation/patterns.js';
 export type SliType = 'availability' | 'latency';
 export type SliStatus = 'breached' | 'no_data' | 'ok';
 export type EvaluationSourceKind = 'fixture' | 'manual' | 'prometheus';
+export type BurnRateSeverity = 'no_data' | 'ok' | 'page' | 'warning' | 'watch';
 
 export interface EvaluationSource {
   kind: EvaluationSourceKind;
@@ -135,6 +136,38 @@ export interface SloRollingWindowsResponse {
   slo: SloDefinition;
 }
 
+export interface BurnRateWindowSummary {
+  badEvents: number;
+  burnRate: number | null;
+  endedAt: string | null;
+  errorBudgetConsumedPercentage: number | null;
+  expectedBudgetConsumedPercentage: number | null;
+  goodEvents: number;
+  observedPercentage: number | null;
+  startedAt: string | null;
+  status: SliStatus;
+  totalEvents: number;
+  windowCount: number;
+}
+
+export interface ObjectiveBurnRateResult {
+  interpretation: string;
+  latencyThresholdMilliseconds?: number;
+  longWindow: BurnRateWindowSummary;
+  severity: BurnRateSeverity;
+  shortWindow: BurnRateWindowSummary;
+  targetPercentage: number;
+  type: SliType;
+}
+
+export interface SloBurnRateResponse {
+  longWindowCount: number;
+  objectives: ObjectiveBurnRateResult[];
+  overallSeverity: BurnRateSeverity;
+  shortWindowCount: number;
+  slo: SloDefinition;
+}
+
 interface CreateEvaluationInput {
   indicators: Partial<Record<SliType, SliEventCounts>>;
   source: EvaluationSource;
@@ -218,7 +251,23 @@ interface SloMetricRow extends QueryResultRow {
   window_ended_at: Date | null;
 }
 
+interface SloBurnRateMetricRow extends QueryResultRow {
+  environment: string;
+  good_events: string | null;
+  indicator_type: SliType;
+  latency_threshold_ms: number | null;
+  service_slug: string;
+  slo_slug: string;
+  target_percentage: string;
+  total_events: string | null;
+  window_days: number;
+  window_ended_at: Date | null;
+  window_started_at: Date | null;
+}
+
 class ValidationError extends Error {}
+
+const millisecondsPerDay = 24 * 60 * 60 * 1_000;
 
 export function calculateSliEvaluation(
   objective: Pick<SliObjective, 'targetPercentage'>,
@@ -308,6 +357,137 @@ export function summarizeRollingWindows(windows: readonly RollingSliWindow[]): R
   };
 }
 
+export function calculateBurnRateWindow(
+  windows: readonly Pick<
+    RollingSliWindow,
+    'badEvents' | 'endedAt' | 'goodEvents' | 'startedAt' | 'totalEvents'
+  >[],
+  input: { targetPercentage: number; windowDays: number },
+): BurnRateWindowSummary {
+  if (windows.length === 0) {
+    return emptyBurnRateWindow();
+  }
+
+  const startedAt = windows[0]?.startedAt ?? null;
+  const endedAt = windows.at(-1)?.endedAt ?? null;
+  const totalEvents = windows.reduce((total, window) => total + window.totalEvents, 0);
+  const goodEvents = windows.reduce((total, window) => total + window.goodEvents, 0);
+  const badEvents = windows.reduce((total, window) => total + window.badEvents, 0);
+  const elapsedMilliseconds =
+    startedAt && endedAt ? Date.parse(endedAt) - Date.parse(startedAt) : 0;
+  const expectedBudgetConsumedPercentage =
+    elapsedMilliseconds > 0
+      ? round((elapsedMilliseconds / (input.windowDays * millisecondsPerDay)) * 100, 3)
+      : null;
+
+  if (totalEvents === 0 || expectedBudgetConsumedPercentage === null) {
+    return {
+      ...emptyBurnRateWindow(),
+      badEvents,
+      endedAt,
+      expectedBudgetConsumedPercentage,
+      goodEvents,
+      startedAt,
+      totalEvents,
+      windowCount: windows.length,
+    };
+  }
+
+  const observedPercentage = round((goodEvents / totalEvents) * 100, 5);
+  const errorBudgetTotalEvents = totalEvents * (1 - input.targetPercentage / 100);
+  const errorBudgetConsumedPercentage = round((badEvents / errorBudgetTotalEvents) * 100, 3);
+
+  return {
+    badEvents,
+    burnRate: round(errorBudgetConsumedPercentage / expectedBudgetConsumedPercentage, 3),
+    endedAt,
+    errorBudgetConsumedPercentage,
+    expectedBudgetConsumedPercentage,
+    goodEvents,
+    observedPercentage,
+    startedAt,
+    status: observedPercentage >= input.targetPercentage ? 'ok' : 'breached',
+    totalEvents,
+    windowCount: windows.length,
+  };
+}
+
+export function classifyMultiWindowBurnRate(
+  shortWindow: Pick<BurnRateWindowSummary, 'burnRate'>,
+  longWindow: Pick<BurnRateWindowSummary, 'burnRate'>,
+): BurnRateSeverity {
+  if (shortWindow.burnRate === null && longWindow.burnRate === null) {
+    return 'no_data';
+  }
+
+  const shortBurnRate = shortWindow.burnRate ?? 0;
+  const longBurnRate = longWindow.burnRate ?? 0;
+
+  if (shortBurnRate >= 4 && longBurnRate >= 2) {
+    return 'page';
+  }
+
+  if (shortBurnRate >= 4 || longBurnRate >= 2) {
+    return 'warning';
+  }
+
+  if (shortBurnRate >= 1 || longBurnRate >= 1) {
+    return 'watch';
+  }
+
+  return 'ok';
+}
+
+export function calculateObjectiveBurnRate(
+  objective: Pick<SliObjective, 'latencyThresholdMilliseconds' | 'targetPercentage' | 'type'>,
+  windows: readonly RollingSliWindow[],
+  input: { longWindowCount: number; shortWindowCount: number; windowDays: number },
+): ObjectiveBurnRateResult {
+  const shortWindow = calculateBurnRateWindow(windows.slice(-input.shortWindowCount), {
+    targetPercentage: objective.targetPercentage,
+    windowDays: input.windowDays,
+  });
+  const longWindow = calculateBurnRateWindow(windows.slice(-input.longWindowCount), {
+    targetPercentage: objective.targetPercentage,
+    windowDays: input.windowDays,
+  });
+  const severity = classifyMultiWindowBurnRate(shortWindow, longWindow);
+
+  return {
+    interpretation: burnRateInterpretation(severity),
+    ...(objective.latencyThresholdMilliseconds
+      ? { latencyThresholdMilliseconds: objective.latencyThresholdMilliseconds }
+      : {}),
+    longWindow,
+    severity,
+    shortWindow,
+    targetPercentage: objective.targetPercentage,
+    type: objective.type,
+  };
+}
+
+export function overallBurnRateSeverity(
+  objectives: readonly Pick<ObjectiveBurnRateResult, 'severity'>[],
+): BurnRateSeverity {
+  const order: Record<BurnRateSeverity, number> = {
+    no_data: 0,
+    ok: 1,
+    watch: 2,
+    warning: 3,
+    page: 4,
+  };
+
+  if (objectives.length === 0) {
+    return 'no_data';
+  }
+
+  return objectives.reduce<BurnRateSeverity>(
+    (highest, objective) =>
+      order[objective.severity] > order[highest] ? objective.severity : highest,
+    'no_data',
+  );
+}
+
 export async function renderSloPrometheusMetrics(database: SqlExecutor): Promise<string> {
   const result = await database.query<SloMetricRow>(`
     SELECT
@@ -345,6 +525,8 @@ export async function renderSloPrometheusMetrics(database: SqlExecutor): Promise
     '# TYPE slo_error_budget_consumed_percentage gauge',
     '# HELP slo_error_budget_remaining_percentage Latest remaining error budget percentage by service, SLO and indicator.',
     '# TYPE slo_error_budget_remaining_percentage gauge',
+    '# HELP slo_error_budget_burn_rate Error budget burn rate by rolling SLI evaluation window.',
+    '# TYPE slo_error_budget_burn_rate gauge',
   ];
 
   for (const row of result.rows) {
@@ -377,7 +559,127 @@ export async function renderSloPrometheusMetrics(database: SqlExecutor): Promise
     }
   }
 
+  lines.push(...(await renderSloBurnRateMetricLines(database)));
+
   return `${lines.join('\n')}\n`;
+}
+
+async function renderSloBurnRateMetricLines(database: SqlExecutor): Promise<string[]> {
+  const result = await database.query<SloBurnRateMetricRow>(`
+    SELECT
+      slo.slug AS slo_slug,
+      svc.slug AS service_slug,
+      svc.environment,
+      slo.window_days,
+      sli.indicator_type,
+      sli.latency_threshold_ms,
+      sli.target_percentage,
+      latest.window_started_at,
+      latest.window_ended_at,
+      latest.total_events,
+      latest.good_events
+    FROM control_plane.sli_definitions sli
+    JOIN control_plane.slo_definitions slo ON slo.id = sli.slo_id
+    JOIN control_plane.services svc ON svc.id = slo.service_id
+    LEFT JOIN LATERAL (
+      SELECT
+        window_started_at,
+        window_ended_at,
+        total_events,
+        good_events
+      FROM control_plane.sli_evaluation_windows evaluation_window
+      WHERE evaluation_window.sli_id = sli.id
+      ORDER BY evaluation_window.window_ended_at DESC
+      LIMIT 6
+    ) latest ON true
+    WHERE latest.window_ended_at IS NOT NULL
+    ORDER BY svc.slug, slo.slug, sli.indicator_type, latest.window_ended_at ASC
+  `);
+  const rowsByObjective = new Map<string, SloBurnRateMetricRow[]>();
+
+  for (const row of result.rows) {
+    const key = [
+      row.service_slug,
+      row.environment,
+      row.slo_slug,
+      row.indicator_type,
+      row.target_percentage,
+    ].join('\0');
+    const rows = rowsByObjective.get(key) ?? [];
+    rows.push(row);
+    rowsByObjective.set(key, rows);
+  }
+
+  return Array.from(rowsByObjective.values()).flatMap((rows) => {
+    const first = rows[0];
+
+    if (!first) {
+      return [];
+    }
+
+    const windows = rows.flatMap((row): RollingSliWindow[] => {
+      if (
+        !row.window_started_at ||
+        !row.window_ended_at ||
+        row.total_events === null ||
+        row.good_events === null
+      ) {
+        return [];
+      }
+
+      const totalEvents = Number(row.total_events);
+      const goodEvents = Number(row.good_events);
+
+      return [
+        {
+          ...calculateSliEvaluation(
+            { targetPercentage: Number(row.target_percentage) },
+            { goodEvents, totalEvents },
+          ),
+          endedAt: row.window_ended_at.toISOString(),
+          source: { kind: 'manual' },
+          startedAt: row.window_started_at.toISOString(),
+        },
+      ];
+    });
+    const burnRate = calculateObjectiveBurnRate(
+      {
+        ...(first.latency_threshold_ms
+          ? { latencyThresholdMilliseconds: first.latency_threshold_ms }
+          : {}),
+        targetPercentage: Number(first.target_percentage),
+        type: first.indicator_type,
+      },
+      windows,
+      {
+        longWindowCount: 6,
+        shortWindowCount: 1,
+        windowDays: first.window_days,
+      },
+    );
+    const baseLabels = {
+      service: first.service_slug,
+      environment: first.environment,
+      slo: first.slo_slug,
+      sli_type: first.indicator_type,
+      severity: burnRate.severity,
+    };
+
+    return [
+      burnRate.shortWindow.burnRate === null
+        ? undefined
+        : `slo_error_budget_burn_rate{${metricLabels({
+            ...baseLabels,
+            window: 'short',
+          })}} ${burnRate.shortWindow.burnRate}`,
+      burnRate.longWindow.burnRate === null
+        ? undefined
+        : `slo_error_budget_burn_rate{${metricLabels({
+            ...baseLabels,
+            window: 'long',
+          })}} ${burnRate.longWindow.burnRate}`,
+    ].flatMap((line) => (line ? [line] : []));
+  });
 }
 
 export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | undefined): void {
@@ -480,6 +782,34 @@ export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | 
       const limit = parseRollingWindowLimit(request.query);
       const repository = new SloRepository(database);
       const response = await repository.rollingWindows(sloId, limit);
+
+      if (!response) {
+        void reply.code(404);
+        return { error: 'SLO not found' };
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        void reply.code(400);
+        return { error: error.message };
+      }
+
+      throw error;
+    }
+  });
+
+  app.get('/slos/:sloId/burn-rate', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to read SLO burn rate' };
+    }
+
+    try {
+      const sloId = parseSloId(request.params);
+      const input = parseBurnRateWindowCounts(request.query);
+      const repository = new SloRepository(database);
+      const response = await repository.burnRate(sloId, input);
 
       if (!response) {
         void reply.code(404);
@@ -797,6 +1127,33 @@ class SloRepository {
     };
   }
 
+  async burnRate(
+    sloId: string,
+    input: { longWindowCount: number; shortWindowCount: number },
+  ): Promise<SloBurnRateResponse | undefined> {
+    const rollingWindows = await this.rollingWindows(sloId, input.longWindowCount);
+
+    if (!rollingWindows) {
+      return undefined;
+    }
+
+    const objectives = rollingWindows.objectives.map((objective) =>
+      calculateObjectiveBurnRate(objective, objective.windows, {
+        longWindowCount: input.longWindowCount,
+        shortWindowCount: input.shortWindowCount,
+        windowDays: rollingWindows.slo.windowDays,
+      }),
+    );
+
+    return {
+      longWindowCount: input.longWindowCount,
+      objectives,
+      overallSeverity: overallBurnRateSeverity(objectives),
+      shortWindowCount: input.shortWindowCount,
+      slo: rollingWindows.slo,
+    };
+  }
+
   private async findById(id: string): Promise<SloDefinition | undefined> {
     const result = await this.database.query<SloRow>(selectSloDefinitionsSql('WHERE slo.id = $1'), [
       id,
@@ -1076,6 +1433,29 @@ function parseRollingWindowLimit(value: unknown): number {
   return requiredInteger(limit, 'limit', { maximum: 90, minimum: 1 });
 }
 
+function parseBurnRateWindowCounts(value: unknown): {
+  longWindowCount: number;
+  shortWindowCount: number;
+} {
+  const query = requireRecord(value, 'Query params must be an object');
+  const shortWindowCount = optionalInteger(query.shortWindows, 'shortWindows', {
+    defaultValue: 1,
+    maximum: 30,
+    minimum: 1,
+  });
+  const longWindowCount = optionalInteger(query.longWindows, 'longWindows', {
+    defaultValue: 6,
+    maximum: 90,
+    minimum: 1,
+  });
+
+  if (longWindowCount < shortWindowCount) {
+    throw new ValidationError('longWindows must be greater than or equal to shortWindows');
+  }
+
+  return { longWindowCount, shortWindowCount };
+}
+
 function mapSloDefinition(row: SloRow): SloDefinition {
   return {
     ...(row.description ? { description: row.description } : {}),
@@ -1205,6 +1585,19 @@ function requiredInteger(
   return value;
 }
 
+function optionalInteger(
+  value: unknown,
+  field: string,
+  range: { defaultValue: number; maximum: number; minimum: number },
+): number {
+  if (value === undefined) {
+    return range.defaultValue;
+  }
+
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  return requiredInteger(parsed, field, range);
+}
+
 function requiredIsoDate(value: unknown, field: string): string {
   const text = requiredString(value, field);
   const time = Date.parse(text);
@@ -1228,6 +1621,37 @@ function requireSingleRow<Row>(rows: Row[], message: string): Row {
 
 function nullableNumber(value: string | null): number | null {
   return value === null ? null : Number(value);
+}
+
+function emptyBurnRateWindow(): BurnRateWindowSummary {
+  return {
+    badEvents: 0,
+    burnRate: null,
+    endedAt: null,
+    errorBudgetConsumedPercentage: null,
+    expectedBudgetConsumedPercentage: null,
+    goodEvents: 0,
+    observedPercentage: null,
+    startedAt: null,
+    status: 'no_data',
+    totalEvents: 0,
+    windowCount: 0,
+  };
+}
+
+function burnRateInterpretation(severity: BurnRateSeverity): string {
+  switch (severity) {
+    case 'page':
+      return 'Short and long windows are burning error budget fast enough to require immediate response.';
+    case 'warning':
+      return 'One burn-rate window is above the escalation threshold; investigate before the SLO is exhausted.';
+    case 'watch':
+      return 'Error budget is being consumed faster than the steady-state allowance.';
+    case 'ok':
+      return 'Error budget consumption is within the expected pace for the SLO horizon.';
+    case 'no_data':
+      return 'There are not enough evaluated events to estimate burn rate.';
+  }
 }
 
 function round(value: number, decimals: number): number {
