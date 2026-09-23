@@ -35,7 +35,9 @@ wait_for_url() {
 
 trap cleanup EXIT
 
-docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null
+if ! docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null; then
+  docker compose ps
+fi
 wait_for_url 'http://localhost:13133/'
 wait_for_url 'http://localhost:9090/-/ready'
 wait_for_url 'http://localhost:3200/ready'
@@ -279,6 +281,7 @@ printf '%s' "$metrics_body" | grep 'outcome="success"' >/dev/null
 printf '%s' "$metrics_body" | grep 'outcome="error"' >/dev/null
 printf '%s' "$metrics_body" | grep 'dependency_mode="slow"' >/dev/null
 printf '%s' "$metrics_body" | grep 'slo_error_budget_consumed_percentage' >/dev/null
+printf '%s' "$metrics_body" | grep 'slo_error_budget_burn_rate' >/dev/null
 
 for _ in $(seq 1 16); do
   firing_alerts=$(curl --fail --silent --show-error http://localhost:9090/api/v1/alerts)

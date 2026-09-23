@@ -72,21 +72,24 @@ Alerta: `OOPSloErrorBudgetBurn`
 
 Severidade: `page`
 
-Sintoma: a ultima avaliacao de SLO consumiu mais de 100% do error budget para um
-SLI.
+Sintoma: as janelas curta e longa de um SLI estao consumindo error budget acima
+do ritmo esperado para o horizonte do SLO.
 
 Causa provavel inicial:
 
 - falhas ou lentidao suficientes para violar o alvo do SLO;
-- uma janela de avaliacao pequena amplificando uma degradacao curta;
+- degradacao curta forte o bastante para elevar a janela curta;
+- degradacao sustentada confirmada pela janela longa;
 - SLO configurado com alvo mais estrito que o comportamento demonstrado.
 
 Primeira acao:
 
 1. Abrir o dashboard `Operational Observability - Demo Business Transactions`.
-2. Conferir sucesso, falha, degradacao e duracao na mesma janela do SLO.
-3. Consultar `GET /slos/<slo-id>/status` para confirmar o SLI violado.
-4. Usar os alertas tecnicos ativos para escolher a rota ou dependencia que deve
+2. Conferir sucesso, falha, degradacao e duracao nas janelas curta e longa.
+3. Consultar `GET /slos/<slo-id>/burn-rate` para confirmar qual SLI esta
+   queimando orçamento rapido demais.
+4. Consultar `GET /slos/<slo-id>/status` para confirmar o estado atual do SLI.
+5. Usar os alertas tecnicos ativos para escolher a rota ou dependencia que deve
    ser investigada primeiro.
 
 Cuidado contra duplicidade: este alerta representa priorizacao por impacto. Se

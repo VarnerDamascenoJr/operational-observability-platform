@@ -49,14 +49,22 @@ groups:
 
       - alert: OOPSloErrorBudgetBurn
         expr: |
-          max by (service, environment, slo, sli_type) (
-            slo_error_budget_consumed_percentage{status="breached"}
-          ) > 100
+          (
+            max by (service, environment, slo, sli_type) (
+              slo_error_budget_burn_rate{window="short"}
+            ) >= 4
+          )
+          and on (service, environment, slo, sli_type)
+          (
+            max by (service, environment, slo, sli_type) (
+              slo_error_budget_burn_rate{window="long"}
+            ) >= 2
+          )
         labels:
           severity: page
           symptom: error_budget
           runbook: docs/symptom-alerts.md#consumo-acelerado-de-error-budget
           dashboard_uid: oop-demo-business
         annotations:
-          summary: 'SLO error budget exhausted for {{ $labels.slo }} {{ $labels.sli_type }}'
-          description: 'The latest SLO evaluation consumed more than 100% of the error budget for service={{ $labels.service }}, environment={{ $labels.environment }}, slo={{ $labels.slo }}, sli={{ $labels.sli_type }}. Use the business dashboard to confirm impact and then inspect traces/logs for the affected window.'
+          summary: 'SLO error budget burn is too fast for {{ $labels.slo }} {{ $labels.sli_type }}'
+          description: 'The short and long SLO windows are burning error budget above the multi-window threshold for service={{ $labels.service }}, environment={{ $labels.environment }}, slo={{ $labels.slo }}, sli={{ $labels.sli_type }}. Use the business dashboard to confirm impact and then inspect traces/logs for the affected window.'
