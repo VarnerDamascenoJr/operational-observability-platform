@@ -31,7 +31,7 @@ Abra o Grafana local em <http://localhost:3001> com `admin` / `admin` e acesse
 1. Ajuste o periodo para os ultimos 30 minutos ou para a janela do teste.
 2. Filtre `service` por `operational-observability-platform`.
 3. Filtre `environment` conforme a execucao local.
-4. Use `Throughput por rota`, `Erros 5xx por rota`, `Latencia media por rota` e
+4. Use `Throughput por rota`, `Erros 5xx por rota`, `Latencia p95 por rota` e
    `Taxa de erro HTTP` para identificar o sintoma.
 5. Quando houver erro ou latencia, copie o `traceId` retornado pela API ou visto
    nos logs e cole na variavel `trace_id`.
@@ -44,7 +44,8 @@ Abra `Operational Observability - Demo Business Transactions`.
 1. Use os mesmos filtros de `service`, `environment` e periodo.
 2. Confira `Transacoes por resultado` para ver sucesso e falha.
 3. Confira `Degradacao` para quantificar chamadas com dependencia lenta.
-4. Use `Duracao media da transacao` para diferenciar latencia normal e degradada.
+4. Use `Distribuicao de latencia da transacao` para diferenciar latencia normal
+   e degradada pela cauda p95, nao apenas pela media.
 5. Use `Logs da transacao demo` para ver logs estruturados com `operation`,
    `outcome`, `dependency_mode`, `trace_id`, `correlation_id` e
    `transaction_id`.

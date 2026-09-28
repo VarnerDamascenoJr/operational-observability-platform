@@ -266,14 +266,76 @@ describe('demo transaction endpoint', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('http_requests_total');
     expect(response.body).toContain('http_request_errors_total');
+    expect(response.body).toContain('# TYPE http_request_duration_seconds histogram');
+    expect(response.body).toContain('http_request_duration_seconds_bucket');
     expect(response.body).toContain('http_request_duration_seconds_count');
     expect(response.body).toContain('route="/demo/transactions"');
     expect(response.body).toContain('status="503"');
     expect(response.body).toContain('demo_transactions_total');
+    expect(response.body).toContain('# TYPE demo_transaction_duration_seconds histogram');
+    expect(response.body).toContain('demo_transaction_duration_seconds_bucket');
     expect(response.body).toContain('demo_transaction_duration_seconds_count');
     expect(response.body).toContain('outcome="success"');
     expect(response.body).toContain('outcome="error"');
     expect(response.body).toContain('dependency_mode="slow"');
+  });
+
+  it('reports latency distributions with mean and tail quantiles', async () => {
+    const latencyApp = buildApp({ database: createHealthyDatabase() });
+
+    await latencyApp.inject({ method: 'GET', url: '/demo/transactions?delayMs=1&asyncMs=1' });
+    await latencyApp.inject({
+      method: 'GET',
+      url: '/demo/transactions?dependency=slow&delayMs=1&asyncMs=1',
+    });
+
+    const response = await latencyApp.inject({
+      method: 'GET',
+      url: '/metrics/latency-distribution',
+    });
+    await latencyApp.close();
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      distributions: Array<{
+        count: number;
+        labels: Record<string, string>;
+        meanMilliseconds: number;
+        metric: string;
+        quantilesMilliseconds: {
+          p50: number | null;
+          p90: number | null;
+          p95: number | null;
+          p99: number | null;
+        };
+        tailToMeanRatio: number | null;
+      }>;
+    };
+    const slowDistribution = body.distributions.find(
+      (distribution) =>
+        distribution.metric === 'demo_transaction_duration_seconds' &&
+        distribution.labels.dependency_mode === 'slow',
+    );
+
+    expect(slowDistribution).toEqual(
+      expect.objectContaining({
+        count: 1,
+        meanMilliseconds: expect.any(Number),
+        tailToMeanRatio: expect.any(Number),
+      }),
+    );
+    expect(slowDistribution?.meanMilliseconds).toBeGreaterThanOrEqual(500);
+    expect(slowDistribution?.quantilesMilliseconds).toEqual(
+      expect.objectContaining({
+        p50: expect.any(Number),
+        p90: expect.any(Number),
+        p95: expect.any(Number),
+        p99: expect.any(Number),
+      }),
+    );
+    expect(slowDistribution?.quantilesMilliseconds.p95).toBeGreaterThanOrEqual(
+      slowDistribution?.meanMilliseconds ?? 0,
+    );
   });
 });
 

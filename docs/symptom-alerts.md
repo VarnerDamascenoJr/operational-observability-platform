@@ -8,10 +8,9 @@ logs correlacionados.
 As regras ficam em
 `observability/prometheus/rules/operational-alerts.yml` e sao carregadas pelo
 Prometheus local. Os limiares desta etapa foram escolhidos para a demonstracao
-local da API `/demo/transactions`. As regras de erro e latencia usam os
-contadores da execucao atual do processo da API, que sao reiniciados no smoke; em
-um ambiente real, elas devem ser convertidas para janelas baseadas em historico
-de trafego e objetivos do servico.
+local da API `/demo/transactions`. A regra de erro usa contadores e a regra de
+latencia usa histogramas Prometheus com p95 em janela curta. Em um ambiente real,
+elas devem ser calibradas com historico de trafego e objetivos do servico.
 
 ## Erro HTTP alto
 
@@ -45,8 +44,8 @@ Alerta: `OOPHighHttpLatency`
 
 Severidade: `warning`
 
-Sintoma: duracao media acumulada de requisicoes de uma rota na execucao local
-atual passou do limiar demonstrativo.
+Sintoma: p95 de duracao de requisicoes de uma rota passou do limiar
+demonstrativo.
 
 Causa provavel inicial:
 
@@ -57,10 +56,11 @@ Causa provavel inicial:
 Primeira acao:
 
 1. Abrir o dashboard `Operational Observability - Service Technical`.
-2. Confirmar se a rota afetada e `/demo/transactions` e se ha trafego com
+2. Comparar media e p95 em `GET /metrics/latency-distribution`.
+3. Confirmar se a rota afetada e `/demo/transactions` e se ha trafego com
    `dependency=slow`.
-3. Abrir traces recentes no Tempo e verificar qual span concentra a duracao.
-4. Consultar logs no Loki filtrando pelo `trace_id` do trace lento.
+4. Abrir traces recentes no Tempo e verificar qual span concentra a duracao.
+5. Consultar logs no Loki filtrando pelo `trace_id` do trace lento.
 
 Cuidado contra duplicidade: se erro HTTP alto e latencia alta dispararem juntos,
 comece pela latencia quando a maioria das respostas ainda for 2xx; comece por

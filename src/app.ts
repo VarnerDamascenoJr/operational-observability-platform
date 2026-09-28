@@ -195,6 +195,9 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return `${metrics.renderPrometheus()}${sloMetrics}`;
   });
+  app.get('/metrics/latency-distribution', async () => ({
+    distributions: metrics.latencyDistributions(),
+  }));
 
   registerSloRoutes(app, options.database);
   registerIncidentRoutes(app, options.database);

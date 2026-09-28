@@ -230,7 +230,7 @@
     },
     {
       "id": 5,
-      "title": "Duracao media da transacao",
+      "title": "Distribuicao de latencia da transacao",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -249,8 +249,8 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (service, environment, outcome, dependency_mode) (rate(demo_transaction_duration_seconds_sum{service=~\"$service\", environment=~\"$environment\", dependency_mode=~\"$dependency_mode\"}[$__rate_interval])) / clamp_min(sum by (service, environment, outcome, dependency_mode) (rate(demo_transaction_duration_seconds_count{service=~\"$service\", environment=~\"$environment\", dependency_mode=~\"$dependency_mode\"}[$__rate_interval])), 0.001)",
-          "legendFormat": "{{outcome}} {{dependency_mode}}",
+          "expr": "histogram_quantile(0.95, sum by (le, service, environment, outcome, dependency_mode) (rate(demo_transaction_duration_seconds_bucket{service=~\"$service\", environment=~\"$environment\", dependency_mode=~\"$dependency_mode\"}[$__rate_interval])))",
+          "legendFormat": "p95 {{outcome}} {{dependency_mode}}",
           "range": true,
           "refId": "A"
         }
@@ -260,7 +260,7 @@
         "overrides": []
       },
       "options": {},
-      "description": "Tempo medio de transacao de negocio.",
+      "description": "Quantil p95 da transacao de negocio calculado por histogramas Prometheus.",
       "links": [
         {
           "title": "Abrir Explore do Tempo",
