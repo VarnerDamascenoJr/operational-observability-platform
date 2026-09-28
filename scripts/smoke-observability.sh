@@ -138,6 +138,11 @@ curl --fail --silent --show-error \
 curl --fail --silent --show-error "$api_base_url/slos/$slo_id/status" |
   jq --exit-status '.overallStatus == "breached"' >/dev/null
 
+curl --fail --silent --show-error "$api_base_url/demo/transactions?dependency=slow&delayMs=1&asyncMs=1" >/dev/null
+curl --fail --silent --show-error "$api_base_url/metrics/latency-distribution" |
+  jq --exit-status \
+    '.distributions[] | select(.metric == "demo_transaction_duration_seconds" and .labels.dependency_mode == "slow" and .quantilesMilliseconds.p95 >= .meanMilliseconds)' >/dev/null
+
 curl --fail --silent --show-error http://localhost:13133/ >/dev/null
 curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/datasources |
   jq --exit-status 'map(.uid) | contains(["prometheus", "tempo", "loki"])' >/dev/null
