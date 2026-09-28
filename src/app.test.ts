@@ -266,10 +266,14 @@ describe('demo transaction endpoint', () => {
     expect(response.statusCode).toBe(200);
     expect(response.body).toContain('http_requests_total');
     expect(response.body).toContain('http_request_errors_total');
+    expect(response.body).toContain('# TYPE http_request_duration_seconds histogram');
+    expect(response.body).toContain('http_request_duration_seconds_bucket');
     expect(response.body).toContain('http_request_duration_seconds_count');
     expect(response.body).toContain('route="/demo/transactions"');
     expect(response.body).toContain('status="503"');
     expect(response.body).toContain('demo_transactions_total');
+    expect(response.body).toContain('# TYPE demo_transaction_duration_seconds histogram');
+    expect(response.body).toContain('demo_transaction_duration_seconds_bucket');
     expect(response.body).toContain('demo_transaction_duration_seconds_count');
     expect(response.body).toContain('outcome="success"');
     expect(response.body).toContain('outcome="error"');

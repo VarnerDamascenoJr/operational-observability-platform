@@ -20,9 +20,12 @@ interface MetricsIdentity {
 }
 
 interface DurationAggregate {
+  buckets: number[];
   count: number;
   sum: number;
 }
+
+const durationBucketsSeconds = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
 
 export class HttpMetrics {
   private readonly identity: MetricsIdentity;
@@ -72,15 +75,15 @@ export class HttpMetrics {
       '# HELP http_request_errors_total Total HTTP requests that returned 5xx.',
       '# TYPE http_request_errors_total counter',
       ...renderCounter('http_request_errors_total', this.errors),
-      '# HELP http_request_duration_seconds HTTP request duration summary.',
-      '# TYPE http_request_duration_seconds summary',
-      ...renderDurationSummary('http_request_duration_seconds', this.durations),
+      '# HELP http_request_duration_seconds HTTP request duration histogram.',
+      '# TYPE http_request_duration_seconds histogram',
+      ...renderDurationHistogram('http_request_duration_seconds', this.durations),
       '# HELP demo_transactions_total Total demo business transactions by outcome and dependency mode.',
       '# TYPE demo_transactions_total counter',
       ...renderCounter('demo_transactions_total', this.demoTransactions),
-      '# HELP demo_transaction_duration_seconds Demo business transaction duration summary.',
-      '# TYPE demo_transaction_duration_seconds summary',
-      ...renderDurationSummary('demo_transaction_duration_seconds', this.demoTransactionDurations),
+      '# HELP demo_transaction_duration_seconds Demo business transaction duration histogram.',
+      '# TYPE demo_transaction_duration_seconds histogram',
+      ...renderDurationHistogram('demo_transaction_duration_seconds', this.demoTransactionDurations),
     ];
 
     return `${lines.join('\n')}\n`;
@@ -98,8 +101,13 @@ function recordDuration(
   key: string,
   durationSeconds: number,
 ): void {
-  const current = values.get(key) ?? { count: 0, sum: 0 };
+  const current =
+    values.get(key) ?? { buckets: durationBucketsSeconds.map(() => 0), count: 0, sum: 0 };
+  const buckets = current.buckets.map((count, index) =>
+    durationSeconds <= durationBucketsSeconds[index] ? count + 1 : count,
+  );
   values.set(key, {
+    buckets,
     count: current.count + 1,
     sum: current.sum + durationSeconds,
   });
@@ -109,8 +117,13 @@ function renderCounter(name: string, values: Map<string, number>): string[] {
   return [...values.entries()].map(([labels, value]) => `${name}{${labels}} ${value}`);
 }
 
-function renderDurationSummary(name: string, values: Map<string, DurationAggregate>): string[] {
+function renderDurationHistogram(name: string, values: Map<string, DurationAggregate>): string[] {
   return [...values.entries()].flatMap(([labels, value]) => [
+    ...value.buckets.map(
+      (count, index) =>
+        `${name}_bucket{${labels},le="${durationBucketsSeconds[index].toString()}"} ${count}`,
+    ),
+    `${name}_bucket{${labels},le="+Inf"} ${value.count}`,
     `${name}_count{${labels}} ${value.count}`,
     `${name}_sum{${labels}} ${value.sum.toFixed(6)}`,
   ]);
