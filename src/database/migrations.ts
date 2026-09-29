@@ -2,25 +2,11 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { QueryResultRow } from 'pg';
-
+import type { AppliedMigration, Migration } from './migrations.types.js';
+import { migrationFilePattern, migrationLockId } from './migrations.utils.js';
 import type { ConnectionProvider } from './postgres.js';
 
-const migrationFilePattern = /^(?<version>\d{4})_(?<name>[a-z0-9_]+)\.sql$/;
-const migrationLockId = 7_418_202_501;
-
-interface AppliedMigration extends QueryResultRow {
-  version: string;
-  name: string;
-  checksum: string;
-}
-
-export interface Migration {
-  version: string;
-  name: string;
-  checksum: string;
-  statement: string;
-}
+export type { Migration } from './migrations.types.js';
 
 function checksum(statement: string): string {
   return createHash('sha256').update(statement).digest('hex');
@@ -91,9 +77,11 @@ export async function runMigrations(
         FROM public.schema_migrations
         ORDER BY version
       `);
+
       const appliedByVersion = new Map(
         appliedResult.rows.map((migration) => [migration.version, migration]),
       );
+
       const pending: Migration[] = [];
 
       for (const migration of migrations) {
