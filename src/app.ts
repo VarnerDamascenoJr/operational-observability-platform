@@ -8,6 +8,7 @@ import type {
   PostgresHealth,
   PostgresHealthRow,
 } from './app.types.js';
+import { loadServiceIdentity } from './config/service.js';
 import type { SqlExecutor } from './database/postgres.js';
 import {
   correlationIdHeader,
@@ -30,19 +31,20 @@ import {
 } from './observability/otlp.js';
 
 export function buildApp(options: BuildAppOptions = {}) {
-  const environment = process.env.NODE_ENV ?? 'development';
-  const serviceName = 'operational-observability-platform';
-  const metrics = options.metrics ?? new HttpMetrics({ service: serviceName, environment });
+  const identity = options.identity ?? loadServiceIdentity();
+  const metrics =
+    options.metrics ??
+    new HttpMetrics({ service: identity.serviceName, environment: identity.environment });
   const telemetry = options.telemetry ?? new NoopTelemetryExporter();
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
       base: {
-        service_name: serviceName,
-        environment,
+        service_name: identity.serviceName,
+        environment: identity.environment,
       },
       transport:
-        environment === 'development' && !options.loggerStream
+        identity.environment === 'development' && !options.loggerStream
           ? { target: 'pino-pretty' }
           : undefined,
       stream: options.loggerStream,

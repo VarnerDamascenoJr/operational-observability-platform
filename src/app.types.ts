@@ -2,6 +2,7 @@ import type { Writable } from 'node:stream';
 
 import type { QueryResultRow } from 'pg';
 
+import type { ServiceIdentity } from './config/service.js';
 import type { SqlExecutor } from './database/postgres.js';
 import type { HttpMetrics } from './observability/metrics.js';
 import type { TelemetryExporter } from './observability/otlp.js';
@@ -19,6 +20,7 @@ declare module 'fastify' {
 export interface BuildAppOptions {
   closeDatabase?: () => Promise<void>;
   database?: SqlExecutor;
+  identity?: ServiceIdentity;
   loggerStream?: Writable;
   metrics?: HttpMetrics;
   telemetry?: TelemetryExporter;
