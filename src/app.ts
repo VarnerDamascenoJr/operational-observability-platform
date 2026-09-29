@@ -1,10 +1,13 @@
-import type { Writable } from 'node:stream';
-
 import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import Fastify, { LogController } from 'fastify';
-import type { QueryResultRow } from 'pg';
 
+import type {
+  BuildAppOptions,
+  HealthResponse,
+  PostgresHealth,
+  PostgresHealthRow,
+} from './app.types.js';
 import type { SqlExecutor } from './database/postgres.js';
 import {
   correlationIdHeader,
@@ -25,63 +28,6 @@ import {
   type DemoTransactionTelemetry,
   type TelemetryExporter,
 } from './observability/otlp.js';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    correlationId: string;
-    observedRoute: string;
-    startedAtNanoseconds: bigint;
-    traceId?: string;
-    transactionId: string;
-  }
-}
-
-interface BuildAppOptions {
-  closeDatabase?: () => Promise<void>;
-  database?: SqlExecutor;
-  loggerStream?: Writable;
-  metrics?: HttpMetrics;
-  telemetry?: TelemetryExporter;
-}
-
-interface PostgresHealthRow extends QueryResultRow {
-  control_plane_schema_ready: boolean;
-  core_tables_ready: boolean;
-  database_name: string;
-  migrations_applied: number;
-}
-
-type PostgresHealth =
-  | {
-      status: 'ok';
-      controlPlaneSchemaReady: true;
-      coreTablesReady: true;
-      database: string;
-      latencyMilliseconds: number;
-      migrationsApplied: number;
-    }
-  | {
-      status: 'error';
-      controlPlaneSchemaReady?: boolean;
-      coreTablesReady?: boolean;
-      database?: string;
-      error: string;
-      latencyMilliseconds?: number;
-      migrationsApplied?: number;
-    }
-  | {
-      status: 'not_configured';
-    };
-
-interface HealthResponse {
-  services: {
-    api: {
-      status: 'ok';
-    };
-    postgres: PostgresHealth;
-  };
-  status: 'degraded' | 'ok';
-}
 
 export function buildApp(options: BuildAppOptions = {}) {
   const environment = process.env.NODE_ENV ?? 'development';
