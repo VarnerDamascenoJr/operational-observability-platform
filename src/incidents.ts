@@ -23,7 +23,7 @@ import type {
   TimelineInput,
   TimelineRow,
   UpdateIncidentInput,
-} from './incidents.types.js';
+} from './incidents/incidents.types.js';
 import { slugPattern, uuidPattern } from './validation/patterns.js';
 
 export function canTransitionIncidentStatus(
