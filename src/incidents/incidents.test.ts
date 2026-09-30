@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { canTransitionIncidentStatus } from './incidents.js';
+import { canTransitionIncidentStatus } from './incidents.rules.js';
 
 describe('incident status transitions', () => {
   it('allows an active incident to move through investigation states', () => {

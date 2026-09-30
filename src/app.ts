@@ -7,7 +7,7 @@ import { loadServiceIdentity } from './config/service.js';
 import { registerDemoRoutes } from './demo/demo.controller.js';
 import { registerHealthRoutes } from './health/health.controller.js';
 import { getCorrelationContext } from './observability/correlation.js';
-import { registerIncidentRoutes } from './incidents.js';
+import { registerIncidentRoutes } from './incidents/incidents.controller.js';
 import { registerMetricsRoutes } from './observability/metrics.controller.js';
 import { HttpMetrics } from './observability/metrics.js';
 import { registerObservabilityHooks } from './observability/observability.hooks.js';
