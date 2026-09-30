@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
 import { IncidentRepository } from './incidents.repository.js';
+import { IncidentService } from './incidents.service.js';
 import {
   parseCreateIncidentInput,
   parseEvidenceInput,
@@ -24,8 +25,8 @@ export function registerIncidentRoutes(
 
     try {
       const input = parseCreateIncidentInput(request.body);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.create(input);
+      const service = createIncidentService(database);
+      const incident = await service.create(input);
       void reply.code(201);
       return incident;
     } catch (error) {
@@ -44,8 +45,8 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to list incidents' };
     }
 
-    const repository = new IncidentRepository(database);
-    return { incidents: await repository.list() };
+    const service = createIncidentService(database);
+    return { incidents: await service.list() };
   });
 
   app.get('/incidents/:incidentId', async (request, reply) => {
@@ -56,8 +57,8 @@ export function registerIncidentRoutes(
 
     try {
       const incidentId = parseIncidentId(request.params);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.findById(incidentId);
+      const service = createIncidentService(database);
+      const incident = await service.findById(incidentId);
 
       if (!incident) {
         void reply.code(404);
@@ -84,8 +85,8 @@ export function registerIncidentRoutes(
     try {
       const incidentId = parseIncidentId(request.params);
       const input = parseUpdateIncidentInput(request.body);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.update(incidentId, input);
+      const service = createIncidentService(database);
+      const incident = await service.update(incidentId, input);
 
       if (!incident) {
         void reply.code(404);
@@ -112,8 +113,8 @@ export function registerIncidentRoutes(
     try {
       const incidentId = parseIncidentId(request.params);
       const input = parseEvidenceInput(request.body);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.addEvidence(incidentId, input);
+      const service = createIncidentService(database);
+      const incident = await service.addEvidence(incidentId, input);
 
       if (!incident) {
         void reply.code(404);
@@ -141,8 +142,8 @@ export function registerIncidentRoutes(
     try {
       const incidentId = parseIncidentId(request.params);
       const input = parseHypothesisInput(request.body);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.addHypothesis(incidentId, input);
+      const service = createIncidentService(database);
+      const incident = await service.addHypothesis(incidentId, input);
 
       if (!incident) {
         void reply.code(404);
@@ -170,8 +171,8 @@ export function registerIncidentRoutes(
     try {
       const incidentId = parseIncidentId(request.params);
       const input = parseTimelineInput(request.body);
-      const repository = new IncidentRepository(database);
-      const incident = await repository.addTimelineEvent(incidentId, input);
+      const service = createIncidentService(database);
+      const incident = await service.addTimelineEvent(incidentId, input);
 
       if (!incident) {
         void reply.code(404);
@@ -189,4 +190,8 @@ export function registerIncidentRoutes(
       throw error;
     }
   });
+}
+
+function createIncidentService(database: SqlExecutor): IncidentService {
+  return new IncidentService(new IncidentRepository(database));
 }

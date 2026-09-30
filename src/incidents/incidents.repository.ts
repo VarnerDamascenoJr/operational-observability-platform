@@ -1,6 +1,5 @@
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
-import { canTransitionIncidentStatus } from './incidents.rules.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
@@ -102,31 +101,12 @@ export class IncidentRepository {
     return row ? this.hydrate(row) : undefined;
   }
 
-  async update(
+  async updateExisting(
     incidentId: string,
     input: UpdateIncidentInput,
-  ): Promise<IncidentResponse | undefined> {
-    const current = await this.findById(incidentId);
-
-    if (!current) {
-      return undefined;
-    }
-
+    current: IncidentResponse,
+  ): Promise<IncidentResponse> {
     const nextStatus = input.status ?? current.status;
-
-    if (!canTransitionIncidentStatus(current.status, nextStatus)) {
-      throw new ValidationError(`Incident cannot move from ${current.status} to ${nextStatus}`);
-    }
-
-    if (nextStatus === 'resolved') {
-      if (!input.rootCause && !current.rootCause) {
-        throw new ValidationError('rootCause is required when resolving an incident');
-      }
-
-      if (!input.preventiveActions && !current.preventiveActions) {
-        throw new ValidationError('preventiveActions is required when resolving an incident');
-      }
-    }
 
     await this.database.query(
       `UPDATE control_plane.incidents
@@ -163,7 +143,13 @@ export class IncidentRepository {
       });
     }
 
-    return this.findById(incidentId);
+    const incident = await this.findById(incidentId);
+
+    if (!incident) {
+      throw new Error('Incident was updated but could not be loaded');
+    }
+
+    return incident;
   }
 
   async addEvidence(
