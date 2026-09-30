@@ -24,29 +24,9 @@ import type {
   TimelineRow,
   UpdateIncidentInput,
 } from './incidents/incidents.types.js';
+export { canTransitionIncidentStatus } from './incidents/incidents.rules.js';
+import { canTransitionIncidentStatus } from './incidents/incidents.rules.js';
 import { slugPattern, uuidPattern } from './validation/patterns.js';
-
-export function canTransitionIncidentStatus(
-  currentStatus: IncidentStatus,
-  nextStatus: IncidentStatus,
-): boolean {
-  if (currentStatus === nextStatus) {
-    return true;
-  }
-
-  if (currentStatus === 'resolved') {
-    return false;
-  }
-
-  const allowedTransitions: Record<IncidentStatus, IncidentStatus[]> = {
-    investigating: ['mitigated', 'resolved'],
-    mitigated: ['investigating', 'resolved'],
-    open: ['investigating', 'mitigated', 'resolved'],
-    resolved: [],
-  };
-
-  return allowedTransitions[currentStatus].includes(nextStatus);
-}
 
 export function registerIncidentRoutes(
   app: FastifyInstance,
