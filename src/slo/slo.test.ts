@@ -6,9 +6,9 @@ import {
   calculateSliEvaluation,
   classifyMultiWindowBurnRate,
   overallSloStatus,
-  renderSloPrometheusMetrics,
   summarizeRollingWindows,
-} from './index.js';
+} from './slo.calculations.js';
+import { renderSloPrometheusMetrics } from './slo.metrics.js';
 import type { SqlExecutor } from '../database/postgres.js';
 import type { QueryResult, QueryResultRow } from 'pg';
 
