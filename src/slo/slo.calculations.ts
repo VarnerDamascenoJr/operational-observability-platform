@@ -8,7 +8,7 @@ import type {
   SliEventCounts,
   SliObjective,
   SliStatus,
-} from '../slo.types.js';
+} from './slo.types.js';
 import { millisecondsPerDay } from '../utils/time.js';
 
 export function calculateSliEvaluation(

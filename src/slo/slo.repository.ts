@@ -18,7 +18,7 @@ import type {
   SloEvaluationResponse,
   SloRollingWindowsResponse,
   SloRow,
-} from '../slo.types.js';
+} from './slo.types.js';
 import {
   calculateObjectiveBurnRate,
   calculateSliEvaluation,

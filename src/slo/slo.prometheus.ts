@@ -1,4 +1,4 @@
-import type { PrometheusMetricDefinition } from './utils/prometheus.js';
+import type { PrometheusMetricDefinition } from '../utils/prometheus.js';
 
 export const sloPrometheusMetricDefinitions = [
   {

@@ -19,7 +19,7 @@ import type { SqlExecutor } from './database/postgres.js';
 import { getCorrelationContext } from './observability/correlation.js';
 import { registerIncidentRoutes } from './incidents.js';
 import { HttpMetrics } from './observability/metrics.js';
-import { registerSloRoutes, renderSloPrometheusMetrics } from './slo.js';
+import { registerSloRoutes, renderSloPrometheusMetrics } from './slo/index.js';
 import {
   buildTraceparent,
   createSpanId,

@@ -8,8 +8,8 @@ import {
   overallSloStatus,
   renderSloPrometheusMetrics,
   summarizeRollingWindows,
-} from './slo.js';
-import type { SqlExecutor } from './database/postgres.js';
+} from './index.js';
+import type { SqlExecutor } from '../database/postgres.js';
 import type { QueryResult, QueryResultRow } from 'pg';
 
 describe('SLO calculations', () => {
