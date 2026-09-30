@@ -5,7 +5,7 @@ import {
   requestIdHeader,
   transactionIdHeader,
   traceparentHeader,
-} from '../../src/observability/correlation.js';
+} from '../../src/constants/headers.js';
 
 test('health endpoint is available through the running server', async ({ request }) => {
   const response = await request.get('/health');

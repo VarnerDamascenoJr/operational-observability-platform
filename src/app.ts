@@ -9,14 +9,14 @@ import type {
   PostgresHealthRow,
 } from './app.types.js';
 import { loadServiceIdentity } from './config/service.js';
-import type { SqlExecutor } from './database/postgres.js';
 import {
   correlationIdHeader,
-  getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
   traceparentHeader,
-} from './observability/correlation.js';
+} from './constants/headers.js';
+import type { SqlExecutor } from './database/postgres.js';
+import { getCorrelationContext } from './observability/correlation.js';
 import { registerIncidentRoutes } from './incidents.js';
 import { HttpMetrics } from './observability/metrics.js';
 import { registerSloRoutes, renderSloPrometheusMetrics } from './slo.js';
@@ -29,6 +29,7 @@ import {
   type DemoTransactionTelemetry,
   type TelemetryExporter,
 } from './observability/otlp.js';
+import { decorateObservabilityRequest } from './observability/correlation.fastify.js';
 
 export function buildApp(options: BuildAppOptions = {}) {
   const identity = options.identity ?? loadServiceIdentity();
@@ -68,11 +69,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   void app.register(helmet);
   void app.register(sensible);
-  app.decorateRequest('correlationId', '');
-  app.decorateRequest('observedRoute', '');
-  app.decorateRequest('startedAtNanoseconds', 0n);
-  app.decorateRequest('traceId');
-  app.decorateRequest('transactionId', '');
+  decorateObservabilityRequest(app);
 
   if (options.closeDatabase) {
     app.addHook('onClose', async () => {

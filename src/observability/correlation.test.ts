@@ -4,11 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   correlationIdHeader,
-  getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
   traceparentHeader,
-} from './correlation.js';
+} from '../constants/headers.js';
+import { getCorrelationContext } from './correlation.js';
 
 function requestWithHeaders(headers: IncomingMessage['headers']): IncomingMessage {
   return { headers } as IncomingMessage;
