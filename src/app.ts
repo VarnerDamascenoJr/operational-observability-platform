@@ -120,6 +120,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return response;
   });
+
   app.get('/metrics', async (request, reply) => {
     void reply.type('text/plain; version=0.0.4; charset=utf-8');
 
@@ -140,12 +141,14 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return `${metrics.renderPrometheus()}${sloMetrics}`;
   });
+
   app.get('/metrics/latency-distribution', async () => ({
     distributions: metrics.latencyDistributions(),
   }));
 
   registerSloRoutes(app, options.database);
   registerIncidentRoutes(app, options.database);
+
   app.get('/demo/transactions', async (request, reply) => {
     const query = request.query as {
       asyncMs?: string;
