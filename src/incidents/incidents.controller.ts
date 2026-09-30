@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 
-import type { SqlExecutor } from './database/postgres.js';
-import { ValidationError } from './errors/validation-error.js';
-import { IncidentRepository } from './incidents/incidents.repository.js';
+import type { SqlExecutor } from '../database/postgres.js';
+import { ValidationError } from '../errors/validation-error.js';
+import { IncidentRepository } from './incidents.repository.js';
 import {
   parseCreateIncidentInput,
   parseEvidenceInput,
@@ -10,9 +10,7 @@ import {
   parseIncidentId,
   parseTimelineInput,
   parseUpdateIncidentInput,
-} from './incidents/incidents.validation.js';
-
-export { canTransitionIncidentStatus } from './incidents/incidents.rules.js';
+} from './incidents.validation.js';
 
 export function registerIncidentRoutes(
   app: FastifyInstance,
