@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import type { SqlExecutor } from './database/postgres.js';
+import { ValidationError } from './errors/validation-error.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
@@ -24,8 +25,6 @@ import type {
   UpdateIncidentInput,
 } from './incidents.types.js';
 import { slugPattern, uuidPattern } from './validation/patterns.js';
-
-class ValidationError extends Error {}
 
 export function canTransitionIncidentStatus(
   currentStatus: IncidentStatus,
