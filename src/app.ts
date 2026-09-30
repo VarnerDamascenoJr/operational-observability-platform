@@ -1,18 +1,22 @@
-import type { Writable } from 'node:stream';
-
 import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import Fastify, { LogController } from 'fastify';
-import type { QueryResultRow } from 'pg';
 
-import type { SqlExecutor } from './database/postgres.js';
+import type {
+  BuildAppOptions,
+  HealthResponse,
+  PostgresHealth,
+  PostgresHealthRow,
+} from './app.types.js';
+import { loadServiceIdentity } from './config/service.js';
 import {
   correlationIdHeader,
-  getCorrelationContext,
   requestIdHeader,
   transactionIdHeader,
   traceparentHeader,
-} from './observability/correlation.js';
+} from './constants/headers.js';
+import type { SqlExecutor } from './database/postgres.js';
+import { getCorrelationContext } from './observability/correlation.js';
 import { registerIncidentRoutes } from './incidents.js';
 import { HttpMetrics } from './observability/metrics.js';
 import { registerSloRoutes, renderSloPrometheusMetrics } from './slo.js';
@@ -25,78 +29,23 @@ import {
   type DemoTransactionTelemetry,
   type TelemetryExporter,
 } from './observability/otlp.js';
-
-declare module 'fastify' {
-  interface FastifyRequest {
-    correlationId: string;
-    observedRoute: string;
-    startedAtNanoseconds: bigint;
-    traceId?: string;
-    transactionId: string;
-  }
-}
-
-interface BuildAppOptions {
-  closeDatabase?: () => Promise<void>;
-  database?: SqlExecutor;
-  loggerStream?: Writable;
-  metrics?: HttpMetrics;
-  telemetry?: TelemetryExporter;
-}
-
-interface PostgresHealthRow extends QueryResultRow {
-  control_plane_schema_ready: boolean;
-  core_tables_ready: boolean;
-  database_name: string;
-  migrations_applied: number;
-}
-
-type PostgresHealth =
-  | {
-      status: 'ok';
-      controlPlaneSchemaReady: true;
-      coreTablesReady: true;
-      database: string;
-      latencyMilliseconds: number;
-      migrationsApplied: number;
-    }
-  | {
-      status: 'error';
-      controlPlaneSchemaReady?: boolean;
-      coreTablesReady?: boolean;
-      database?: string;
-      error: string;
-      latencyMilliseconds?: number;
-      migrationsApplied?: number;
-    }
-  | {
-      status: 'not_configured';
-    };
-
-interface HealthResponse {
-  services: {
-    api: {
-      status: 'ok';
-    };
-    postgres: PostgresHealth;
-  };
-  status: 'degraded' | 'ok';
-}
+import { decorateObservabilityRequest } from './observability/correlation.fastify.js';
 
 export function buildApp(options: BuildAppOptions = {}) {
-  const environment = process.env.NODE_ENV ?? 'development';
-  const serviceName = 'operational-observability-platform';
-  const metrics = options.metrics ?? new HttpMetrics({ service: serviceName, environment });
+  const identity = options.identity ?? loadServiceIdentity();
+  const metrics =
+    options.metrics ??
+    new HttpMetrics({ service: identity.serviceName, environment: identity.environment });
   const telemetry = options.telemetry ?? new NoopTelemetryExporter();
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? 'info',
       base: {
-        service_name: serviceName,
-        environment,
+        service_name: identity.serviceName,
+        environment: identity.environment,
       },
       transport:
-        environment === 'development' && !options.loggerStream
+        identity.environment === 'development' && !options.loggerStream
           ? { target: 'pino-pretty' }
           : undefined,
       stream: options.loggerStream,
@@ -120,11 +69,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   void app.register(helmet);
   void app.register(sensible);
-  app.decorateRequest('correlationId', '');
-  app.decorateRequest('observedRoute', '');
-  app.decorateRequest('startedAtNanoseconds', 0n);
-  app.decorateRequest('traceId');
-  app.decorateRequest('transactionId', '');
+  decorateObservabilityRequest(app);
 
   if (options.closeDatabase) {
     app.addHook('onClose', async () => {
@@ -175,6 +120,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return response;
   });
+
   app.get('/metrics', async (request, reply) => {
     void reply.type('text/plain; version=0.0.4; charset=utf-8');
 
@@ -195,12 +141,14 @@ export function buildApp(options: BuildAppOptions = {}) {
 
     return `${metrics.renderPrometheus()}${sloMetrics}`;
   });
+
   app.get('/metrics/latency-distribution', async () => ({
     distributions: metrics.latencyDistributions(),
   }));
 
   registerSloRoutes(app, options.database);
   registerIncidentRoutes(app, options.database);
+
   app.get('/demo/transactions', async (request, reply) => {
     const query = request.query as {
       asyncMs?: string;

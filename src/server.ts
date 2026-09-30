@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { buildApp } from './app.js';
 import { loadDatabaseConfig } from './config/database.js';
+import { loadServiceIdentity } from './config/service.js';
 import { runMigrations } from './database/migrations.js';
 import { PostgresDatabase } from './database/postgres.js';
 import { createTelemetryExporterFromEnv } from './observability/otlp.js';
@@ -13,12 +14,12 @@ if (existsSync('.env')) {
 }
 
 const database = new PostgresDatabase(loadDatabaseConfig());
-const environment = process.env.NODE_ENV ?? 'development';
-const serviceName = 'operational-observability-platform';
+const identity = loadServiceIdentity();
 const app = buildApp({
   closeDatabase: () => database.close(),
   database,
-  telemetry: createTelemetryExporterFromEnv(process.env, { environment, serviceName }),
+  identity,
+  telemetry: createTelemetryExporterFromEnv(process.env, identity),
 });
 const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? '0.0.0.0';

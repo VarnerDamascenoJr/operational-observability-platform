@@ -4,13 +4,13 @@ import type { QueryResult, QueryResultRow } from 'pg';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from './app.js';
-import type { SqlExecutor } from './database/postgres.js';
 import {
   correlationIdHeader,
   requestIdHeader,
   transactionIdHeader,
   traceparentHeader,
-} from './observability/correlation.js';
+} from './constants/headers.js';
+import type { SqlExecutor } from './database/postgres.js';
 import type { DemoTransactionTelemetry, TelemetryExporter } from './observability/otlp.js';
 
 const app = buildApp({ database: createHealthyDatabase() });

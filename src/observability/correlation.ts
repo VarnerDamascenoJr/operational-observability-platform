@@ -1,27 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 
-export const requestIdHeader = 'x-request-id';
-export const correlationIdHeader = 'x-correlation-id';
-export const transactionIdHeader = 'x-transaction-id';
-export const traceparentHeader = 'traceparent';
+import {
+  correlationIdHeader,
+  requestIdHeader,
+  transactionIdHeader,
+  traceparentHeader,
+} from '../constants/headers.js';
+import type { CorrelatedIncomingMessage, CorrelationContext } from './correlation.types.js';
+import {
+  correlationContextSymbol,
+  correlationIdPattern,
+  spanIdPattern,
+  traceFlagsPattern,
+  traceIdPattern,
+  traceVersionPattern,
+} from '../utils/correlation.js';
 
-const correlationIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-const correlationContextSymbol = Symbol('correlation-context');
-const traceIdPattern = /^[0-9a-f]{32}$/;
-const spanIdPattern = /^[0-9a-f]{16}$/;
-const traceFlagsPattern = /^[0-9a-f]{2}$/;
-
-export interface CorrelationContext {
-  requestId: string;
-  correlationId: string;
-  transactionId: string;
-  traceId?: string;
-}
-
-type CorrelatedIncomingMessage = IncomingMessage & {
-  [correlationContextSymbol]?: CorrelationContext;
-};
+export type { CorrelationContext } from './correlation.types.js';
 
 function validHeaderValue(headers: IncomingHttpHeaders, name: string): string | undefined {
   const value = headers[name];
@@ -48,7 +44,7 @@ function traceIdFromTraceparent(headers: IncomingHttpHeaders): string | undefine
     return undefined;
   }
 
-  if (version === 'ff' || !/^[0-9a-f]{2}$/.test(version)) {
+  if (version === 'ff' || !traceVersionPattern.test(version)) {
     return undefined;
   }
 
