@@ -89,9 +89,33 @@ Primeira acao:
 3. Consultar `GET /slos/<slo-id>/burn-rate` para confirmar qual SLI esta
    queimando orçamento rapido demais.
 4. Consultar `GET /slos/<slo-id>/status` para confirmar o estado atual do SLI.
-5. Usar os alertas tecnicos ativos para escolher a rota ou dependencia que deve
+5. Consultar `GET /slos/<slo-id>/process-control` para separar pico isolado de
+   mudanca sustentada contra o historico recente.
+6. Usar os alertas tecnicos ativos para escolher a rota ou dependencia que deve
    ser investigada primeiro.
 
 Cuidado contra duplicidade: este alerta representa priorizacao por impacto. Se
 alertas tecnicos tambem estiverem ativos, mantenha um unico incidente orientado
 pelo SLO e anexe os alertas de erro ou latencia como evidencias.
+
+## Anomalia estatistica de processo
+
+Sinal: `GET /slos/<slo-id>/process-control`
+
+Severidade: `watch` para `isolated_spike`; `warning` para `sustained_shift`.
+
+Sintoma: a taxa de eventos ruins saiu do limite historico calculado por EWMA.
+
+Causa provavel inicial:
+
+- mudanca sustentada de latencia ou erro ainda abaixo de um limiar fixo;
+- pico operacional que merece acompanhamento, mas nao nova pagina imediata;
+- baseline recente pequeno demais para conclusao forte.
+
+Primeira acao:
+
+1. Conferir `baseline.meanBadEventPercentage` e `upperControlLimit`.
+2. Se `pattern=sustained_shift`, anexar o objeto `evidence` da anomalia ao
+   incidente ativo.
+3. Cruzar a janela anomalas com dashboards, traces e logs antes de apontar causa
+   raiz.

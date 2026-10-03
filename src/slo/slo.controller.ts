@@ -7,6 +7,7 @@ import {
   parseBurnRateWindowCounts,
   parseCreateSloInput,
   parseEvaluationInput,
+  parseProcessControlInput,
   parseRollingWindowLimit,
   parseSloId,
 } from './slo.validation.js';
@@ -139,6 +140,34 @@ export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | 
       const input = parseBurnRateWindowCounts(request.query);
       const repository = new SloRepository(database);
       const response = await repository.burnRate(sloId, input);
+
+      if (!response) {
+        void reply.code(404);
+        return { error: 'SLO not found' };
+      }
+
+      return response;
+    } catch (error) {
+      if (error instanceof ValidationError) {
+        void reply.code(400);
+        return { error: error.message };
+      }
+
+      throw error;
+    }
+  });
+
+  app.get('/slos/:sloId/process-control', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to read SLO process control' };
+    }
+
+    try {
+      const sloId = parseSloId(request.params);
+      const input = parseProcessControlInput(request.query);
+      const repository = new SloRepository(database);
+      const response = await repository.processControl(sloId, input);
 
       if (!response) {
         void reply.code(404);

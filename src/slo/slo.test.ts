@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyzeObjectiveProcessControl,
   calculateBurnRateWindow,
   calculateObjectiveBurnRate,
   calculateSliEvaluation,
@@ -11,6 +12,7 @@ import {
 import { renderSloPrometheusMetrics } from './slo.metrics.js';
 import type { SqlExecutor } from '../database/postgres.js';
 import type { QueryResult, QueryResultRow } from 'pg';
+import type { RollingSliWindow } from './slo.types.js';
 
 describe('SLO calculations', () => {
   it('calculates availability SLI and remaining error budget', () => {
@@ -234,6 +236,85 @@ describe('SLO calculations', () => {
       }),
     );
   });
+
+  it('keeps a stable series inside statistical process control limits', () => {
+    const result = analyzeObjectiveProcessControl(
+      { targetPercentage: 99, type: 'availability' },
+      processControlWindows([1, 1, 1, 1, 1, 1, 1]),
+      {
+        baselineWindowCount: 5,
+        ewmaLambda: 1,
+        sigmaMultiplier: 3,
+        sustainedWindowCount: 3,
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        anomalies: [],
+        pattern: 'normal',
+        severity: 'ok',
+      }),
+    );
+  });
+
+  it('classifies a single process-control excursion as an isolated spike', () => {
+    const result = analyzeObjectiveProcessControl(
+      { targetPercentage: 99, type: 'availability' },
+      processControlWindows([1, 1, 1, 1, 1, 10, 1, 1]),
+      {
+        baselineWindowCount: 5,
+        ewmaLambda: 1,
+        sigmaMultiplier: 3,
+        sustainedWindowCount: 3,
+      },
+    );
+
+    expect(result.pattern).toBe('isolated_spike');
+    expect(result.severity).toBe('watch');
+    expect(result.anomalies).toHaveLength(1);
+    expect(result.anomalies[0]).toEqual(
+      expect.objectContaining({
+        badEventPercentage: 10,
+        pattern: 'isolated_spike',
+        severity: 'watch',
+      }),
+    );
+    expect(result.anomalies[0]?.evidence).toEqual(
+      expect.objectContaining({
+        title: 'SPC anomaly on availability SLI',
+        type: 'note',
+      }),
+    );
+  });
+
+  it('classifies repeated process-control excursions as a sustained shift', () => {
+    const result = analyzeObjectiveProcessControl(
+      { latencyThresholdMilliseconds: 500, targetPercentage: 95, type: 'latency' },
+      processControlWindows([1, 1, 1, 1, 1, 8, 9, 10]),
+      {
+        baselineWindowCount: 5,
+        ewmaLambda: 1,
+        sigmaMultiplier: 3,
+        sustainedWindowCount: 3,
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        latencyThresholdMilliseconds: 500,
+        pattern: 'sustained_shift',
+        severity: 'warning',
+      }),
+    );
+    expect(result.anomalies.at(-1)).toEqual(
+      expect.objectContaining({
+        badEventPercentage: 10,
+        pattern: 'sustained_shift',
+        severity: 'warning',
+      }),
+    );
+  });
 });
 
 describe('SLO Prometheus metrics', () => {
@@ -291,4 +372,28 @@ function queryResult<Row extends QueryResultRow>(rows: Row[]): QueryResult<Row> 
     rowCount: rows.length,
     rows,
   };
+}
+
+function processControlWindows(badEventPercentages: number[]): RollingSliWindow[] {
+  return badEventPercentages.map((badEventPercentage, index) => {
+    const totalEvents = 1_000;
+    const badEvents = Math.round((badEventPercentage / 100) * totalEvents);
+    const startedAt = Date.UTC(2026, 8, 1 + index);
+    const endedAt = Date.UTC(2026, 8, 2 + index);
+
+    return {
+      badEvents,
+      endedAt: new Date(endedAt).toISOString(),
+      errorBudgetConsumedPercentage: null,
+      errorBudgetRemainingPercentage: null,
+      errorBudgetTotalEvents: null,
+      goodEvents: totalEvents - badEvents,
+      observedPercentage: 100 - badEventPercentage,
+      source: { kind: 'fixture' },
+      startedAt: new Date(startedAt).toISOString(),
+      status: badEventPercentage > 5 ? 'breached' : 'ok',
+      targetPercentage: 95,
+      totalEvents,
+    };
+  });
 }

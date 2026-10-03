@@ -2,6 +2,10 @@ import type {
   BurnRateSeverity,
   BurnRateWindowSummary,
   ObjectiveBurnRateResult,
+  ProcessControlAnomaly,
+  ProcessControlObjectiveResult,
+  ProcessControlOptions,
+  ProcessControlSeverity,
   RollingSliSummary,
   RollingSliWindow,
   SliEvaluationResult,
@@ -230,6 +234,153 @@ export function overallBurnRateSeverity(
   );
 }
 
+export function analyzeObjectiveProcessControl(
+  objective: Pick<SliObjective, 'latencyThresholdMilliseconds' | 'targetPercentage' | 'type'>,
+  windows: readonly RollingSliWindow[],
+  options: ProcessControlOptions,
+): ProcessControlObjectiveResult {
+  const evaluatedWindows = windows.filter((window) => window.totalEvents > 0);
+  const baselineWindows = evaluatedWindows.slice(0, options.baselineWindowCount);
+  const monitoredWindows = evaluatedWindows.slice(options.baselineWindowCount);
+  const baselineRates = baselineWindows.map(badEventPercentage);
+
+  if (baselineRates.length < options.baselineWindowCount || monitoredWindows.length === 0) {
+    return {
+      anomalies: [],
+      baseline: {
+        meanBadEventPercentage: baselineRates.length === 0 ? null : round(mean(baselineRates), 5),
+        sampleSize: baselineRates.length,
+        standardDeviation:
+          baselineRates.length < 2 ? null : round(sampleStandardDeviation(baselineRates), 5),
+        upperControlLimit: null,
+      },
+      interpretation: processControlInterpretation('no_data'),
+      ...(objective.latencyThresholdMilliseconds
+        ? { latencyThresholdMilliseconds: objective.latencyThresholdMilliseconds }
+        : {}),
+      observations: evaluatedWindows.map((window) =>
+        processControlObservation(window, {
+          anomalous: false,
+          ewmaBadEventPercentage: null,
+          upperControlLimit: null,
+        }),
+      ),
+      pattern: 'normal',
+      severity: 'no_data',
+      targetPercentage: objective.targetPercentage,
+      type: objective.type,
+    };
+  }
+
+  const baselineMean = mean(baselineRates);
+  const baselineStandardDeviation = sampleStandardDeviation(baselineRates);
+  const effectiveStandardDeviation =
+    baselineStandardDeviation === 0 ? minimumSigma(baselineMean) : baselineStandardDeviation;
+  const ewmaStandardDeviation =
+    effectiveStandardDeviation * Math.sqrt(options.ewmaLambda / (2 - options.ewmaLambda));
+  const upperControlLimit = round(
+    baselineMean + options.sigmaMultiplier * ewmaStandardDeviation,
+    5,
+  );
+  let ewma = baselineMean;
+  let consecutiveAnomalies = 0;
+  const anomalies: ProcessControlAnomaly[] = [];
+  const observations = baselineWindows.map((window) =>
+    processControlObservation(window, {
+      anomalous: false,
+      ewmaBadEventPercentage: null,
+      upperControlLimit,
+    }),
+  );
+
+  for (const window of monitoredWindows) {
+    const badRate = badEventPercentage(window);
+    ewma = options.ewmaLambda * badRate + (1 - options.ewmaLambda) * ewma;
+    const roundedEwma = round(ewma, 5);
+    const anomalous = roundedEwma > upperControlLimit;
+
+    consecutiveAnomalies = anomalous ? consecutiveAnomalies + 1 : 0;
+    observations.push(
+      processControlObservation(window, {
+        anomalous,
+        ewmaBadEventPercentage: roundedEwma,
+        upperControlLimit,
+      }),
+    );
+
+    if (anomalous) {
+      const pattern =
+        consecutiveAnomalies >= options.sustainedWindowCount ? 'sustained_shift' : 'isolated_spike';
+      const severity = pattern === 'sustained_shift' ? 'warning' : 'watch';
+
+      anomalies.push({
+        badEventPercentage: round(badRate, 5),
+        endedAt: window.endedAt,
+        evidence: {
+          description: [
+            `SPC detected ${pattern.replace('_', ' ')} for ${objective.type}.`,
+            `EWMA bad-event rate ${roundedEwma}% exceeded upper control limit ${upperControlLimit}%.`,
+            `Baseline mean was ${round(baselineMean, 5)}% over ${baselineRates.length} windows.`,
+          ].join(' '),
+          title: `SPC anomaly on ${objective.type} SLI`,
+          type: 'note',
+        },
+        ewmaBadEventPercentage: roundedEwma,
+        pattern,
+        severity,
+        upperControlLimit,
+      });
+    }
+  }
+
+  const pattern = anomalies.some((anomaly) => anomaly.pattern === 'sustained_shift')
+    ? 'sustained_shift'
+    : anomalies.length > 0
+      ? 'isolated_spike'
+      : 'normal';
+  const severity = processControlSeverity(pattern);
+
+  return {
+    anomalies,
+    baseline: {
+      meanBadEventPercentage: round(baselineMean, 5),
+      sampleSize: baselineRates.length,
+      standardDeviation: round(baselineStandardDeviation, 5),
+      upperControlLimit,
+    },
+    interpretation: processControlInterpretation(severity),
+    ...(objective.latencyThresholdMilliseconds
+      ? { latencyThresholdMilliseconds: objective.latencyThresholdMilliseconds }
+      : {}),
+    observations,
+    pattern,
+    severity,
+    targetPercentage: objective.targetPercentage,
+    type: objective.type,
+  };
+}
+
+export function overallProcessControlSeverity(
+  objectives: readonly Pick<ProcessControlObjectiveResult, 'severity'>[],
+): ProcessControlSeverity {
+  const order: Record<ProcessControlSeverity, number> = {
+    no_data: 0,
+    ok: 1,
+    watch: 2,
+    warning: 3,
+  };
+
+  if (objectives.length === 0) {
+    return 'no_data';
+  }
+
+  return objectives.reduce<ProcessControlSeverity>(
+    (highest, objective) =>
+      order[objective.severity] > order[highest] ? objective.severity : highest,
+    'no_data',
+  );
+}
+
 export function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -264,4 +415,77 @@ function burnRateInterpretation(severity: BurnRateSeverity): string {
     case 'no_data':
       return 'There are not enough evaluated events to estimate burn rate.';
   }
+}
+
+function badEventPercentage(window: Pick<RollingSliWindow, 'badEvents' | 'totalEvents'>): number {
+  return window.totalEvents === 0 ? 0 : (window.badEvents / window.totalEvents) * 100;
+}
+
+function mean(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function minimumSigma(baselineMean: number): number {
+  return Math.max(0.1, baselineMean * 0.1);
+}
+
+function processControlObservation(
+  window: RollingSliWindow,
+  input: {
+    anomalous: boolean;
+    ewmaBadEventPercentage: number | null;
+    upperControlLimit: number | null;
+  },
+) {
+  return {
+    anomalous: input.anomalous,
+    badEventPercentage: window.totalEvents === 0 ? null : round(badEventPercentage(window), 5),
+    endedAt: window.endedAt,
+    ewmaBadEventPercentage: input.ewmaBadEventPercentage,
+    goodEvents: window.goodEvents,
+    source: window.source,
+    startedAt: window.startedAt,
+    totalEvents: window.totalEvents,
+    upperControlLimit: input.upperControlLimit,
+  };
+}
+
+function processControlSeverity(
+  pattern: ProcessControlObjectiveResult['pattern'],
+): ProcessControlSeverity {
+  switch (pattern) {
+    case 'sustained_shift':
+      return 'warning';
+    case 'isolated_spike':
+      return 'watch';
+    case 'normal':
+      return 'ok';
+  }
+}
+
+function processControlInterpretation(severity: ProcessControlSeverity): string {
+  switch (severity) {
+    case 'warning':
+      return 'EWMA shows a sustained shift above the historical control limit; investigate as an anomaly evidence.';
+    case 'watch':
+      return 'EWMA crossed the historical control limit in an isolated window; watch for recurrence before escalating.';
+    case 'ok':
+      return 'Recent bad-event rate is inside the historical control limit.';
+    case 'no_data':
+      return 'There are not enough baseline and monitored windows to estimate statistical process control.';
+  }
+}
+
+function sampleStandardDeviation(values: readonly number[]): number {
+  if (values.length < 2) {
+    return 0;
+  }
+
+  const average = mean(values);
+  const sumSquaredDistance = values.reduce((total, value) => total + (value - average) ** 2, 0);
+  return Math.sqrt(sumSquaredDistance / (values.length - 1));
 }

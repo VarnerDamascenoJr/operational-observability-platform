@@ -161,3 +161,34 @@ A severidade combina os dois recortes:
 O endpoint tambem informa, por janela, eventos totais, eventos bons, eventos
 ruins, percentual observado, percentual de error budget consumido, percentual de
 budget esperado para o tempo coberto e a interpretacao operacional.
+
+## Consultar controle estatistico de processo
+
+```bash
+curl 'http://localhost:3000/slos/<slo-id>/process-control?limit=14&baselineWindows=5'
+```
+
+O controle estatistico de processo usa EWMA sobre a taxa de eventos ruins das
+janelas avaliadas. As primeiras `baselineWindows` janelas formam a linha de base;
+as janelas seguintes sao comparadas contra um limite superior de controle.
+
+Parametros principais:
+
+- `limit`: quantidade maxima de janelas recentes usadas na analise;
+- `baselineWindows`: quantidade de janelas iniciais usadas para estimar media e
+  desvio padrao historicos;
+- `lambda`: peso do EWMA para a janela mais recente;
+- `sigmaMultiplier`: multiplicador do desvio padrao no limite de controle;
+- `sustainedWindows`: quantidade de violacoes consecutivas para classificar
+  mudanca sustentada.
+
+A resposta diferencia:
+
+- `normal`: serie recente dentro do limite historico;
+- `isolated_spike`: uma violacao isolada, boa para acompanhar recorrencia;
+- `sustained_shift`: violacoes consecutivas, boa candidata a evidencia de
+  incidente.
+
+Cada anomalia inclui um objeto `evidence` com `type: "note"`, titulo e
+descricao. Esse objeto pode ser anexado ao incidente via
+`POST /incidents/<incident-id>/evidence`.

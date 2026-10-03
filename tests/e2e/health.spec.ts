@@ -82,6 +82,7 @@ test('demo transaction supports success and controlled dependency failure', asyn
 });
 
 test('SLO API configures objectives and calculates error budget state', async ({ request }) => {
+  const sloSlug = `demo-transaction-slo-${Date.now()}`;
   const createResponse = await request.post('/slos', {
     data: {
       project: {
@@ -94,7 +95,7 @@ test('SLO API configures objectives and calculates error budget state', async ({
         environment: 'e2e',
         owner: 'platform',
       },
-      slug: 'demo-transaction-slo',
+      slug: sloSlug,
       name: 'Demo transaction SLO',
       description: 'Demonstrates availability, latency and error budget calculations.',
       windowDays: 7,
@@ -118,7 +119,7 @@ test('SLO API configures objectives and calculates error budget state', async ({
     objectives: Array<{ type: string }>;
     slug: string;
   };
-  expect(created.slug).toBe('demo-transaction-slo');
+  expect(created.slug).toBe(sloSlug);
   expect(created.objectives.map((objective) => objective.type).sort()).toEqual([
     'availability',
     'latency',
@@ -129,7 +130,7 @@ test('SLO API configures objectives and calculates error budget state', async ({
   await expect(listResponse).toBeOK();
   await expect(listResponse.json()).resolves.toEqual(
     expect.objectContaining({
-      slos: expect.arrayContaining([expect.objectContaining({ slug: 'demo-transaction-slo' })]),
+      slos: expect.arrayContaining([expect.objectContaining({ slug: sloSlug })]),
     }),
   );
 
@@ -213,7 +214,7 @@ test('SLO API configures objectives and calculates error budget state', async ({
   await expect(statusResponse.json()).resolves.toEqual(
     expect.objectContaining({
       overallStatus: 'breached',
-      slo: expect.objectContaining({ slug: 'demo-transaction-slo' }),
+      slo: expect.objectContaining({ slug: sloSlug }),
       window: {
         startedAt: '2026-09-13T00:00:00.000Z',
         endedAt: '2026-09-14T00:00:00.000Z',
@@ -318,6 +319,78 @@ test('SLO API configures objectives and calculates error budget state', async ({
           type: 'latency',
         }),
       ]),
+    }),
+  );
+
+  for (const window of [
+    {
+      startedAt: '2026-09-14T00:00:00.000Z',
+      endedAt: '2026-09-15T00:00:00.000Z',
+      availabilityGoodEvents: 900,
+      latencyGoodEvents: 900,
+    },
+    {
+      startedAt: '2026-09-15T00:00:00.000Z',
+      endedAt: '2026-09-16T00:00:00.000Z',
+      availabilityGoodEvents: 900,
+      latencyGoodEvents: 900,
+    },
+  ]) {
+    const processControlEvaluationResponse = await request.post(`/slos/${created.id}/evaluations`, {
+      data: {
+        windowStartedAt: window.startedAt,
+        windowEndedAt: window.endedAt,
+        indicators: {
+          availability: {
+            totalEvents: 1_000,
+            goodEvents: window.availabilityGoodEvents,
+          },
+          latency: {
+            totalEvents: 1_000,
+            goodEvents: window.latencyGoodEvents,
+          },
+        },
+        source: {
+          kind: 'fixture',
+          period: '1d',
+          query: 'fixtures/slo/demo-transaction-windows.json',
+        },
+      },
+    });
+
+    expect(processControlEvaluationResponse.status()).toBe(201);
+  }
+
+  const processControlResponse = await request.get(
+    `/slos/${created.id}/process-control?limit=4&baselineWindows=2&lambda=1&sustainedWindows=2`,
+  );
+
+  await expect(processControlResponse).toBeOK();
+  await expect(processControlResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      overallSeverity: 'warning',
+      objectives: expect.arrayContaining([
+        expect.objectContaining({
+          anomalies: expect.arrayContaining([
+            expect.objectContaining({
+              evidence: expect.objectContaining({
+                title: 'SPC anomaly on availability SLI',
+                type: 'note',
+              }),
+              pattern: 'sustained_shift',
+              severity: 'warning',
+            }),
+          ]),
+          pattern: 'sustained_shift',
+          severity: 'warning',
+          type: 'availability',
+        }),
+      ]),
+      options: expect.objectContaining({
+        baselineWindowCount: 2,
+        ewmaLambda: 1,
+        sustainedWindowCount: 2,
+      }),
     }),
   );
 });
