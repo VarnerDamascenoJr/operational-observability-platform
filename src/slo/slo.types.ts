@@ -4,6 +4,8 @@ export type SliType = 'availability' | 'latency';
 export type SliStatus = 'breached' | 'no_data' | 'ok';
 export type EvaluationSourceKind = 'fixture' | 'manual' | 'prometheus';
 export type BurnRateSeverity = 'no_data' | 'ok' | 'page' | 'warning' | 'watch';
+export type ProcessControlPattern = 'isolated_spike' | 'normal' | 'sustained_shift';
+export type ProcessControlSeverity = 'no_data' | 'ok' | 'warning' | 'watch';
 
 export interface EvaluationSource {
   kind: EvaluationSourceKind;
@@ -161,6 +163,68 @@ export interface SloBurnRateResponse {
   objectives: ObjectiveBurnRateResult[];
   overallSeverity: BurnRateSeverity;
   shortWindowCount: number;
+  slo: SloDefinition;
+}
+
+export interface ProcessControlOptions {
+  baselineWindowCount: number;
+  ewmaLambda: number;
+  sigmaMultiplier: number;
+  sustainedWindowCount: number;
+}
+
+export interface ProcessControlBaseline {
+  meanBadEventPercentage: number | null;
+  sampleSize: number;
+  standardDeviation: number | null;
+  upperControlLimit: number | null;
+}
+
+export interface ProcessControlObservation {
+  anomalous: boolean;
+  badEventPercentage: number | null;
+  endedAt: string;
+  ewmaBadEventPercentage: number | null;
+  goodEvents: number;
+  source: EvaluationSource;
+  startedAt: string;
+  totalEvents: number;
+  upperControlLimit: number | null;
+}
+
+export interface ProcessControlIncidentEvidence {
+  description: string;
+  title: string;
+  type: 'note';
+}
+
+export interface ProcessControlAnomaly {
+  badEventPercentage: number;
+  endedAt: string;
+  evidence: ProcessControlIncidentEvidence;
+  ewmaBadEventPercentage: number;
+  pattern: Exclude<ProcessControlPattern, 'normal'>;
+  severity: Exclude<ProcessControlSeverity, 'no_data' | 'ok'>;
+  upperControlLimit: number;
+}
+
+export interface ProcessControlObjectiveResult {
+  anomalies: ProcessControlAnomaly[];
+  baseline: ProcessControlBaseline;
+  interpretation: string;
+  latencyThresholdMilliseconds?: number;
+  observations: ProcessControlObservation[];
+  pattern: ProcessControlPattern;
+  severity: ProcessControlSeverity;
+  targetPercentage: number;
+  type: SliType;
+}
+
+export interface SloProcessControlResponse {
+  limit: number;
+  objectives: ProcessControlObjectiveResult[];
+  options: ProcessControlOptions;
+  overallSeverity: ProcessControlSeverity;
   slo: SloDefinition;
 }
 
