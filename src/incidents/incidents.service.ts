@@ -58,10 +58,7 @@ export class IncidentService {
     return this.repository.addEvidence(incidentId, input);
   }
 
-  addHypothesis(
-    incidentId: string,
-    input: HypothesisInput,
-  ): Promise<IncidentResponse | undefined> {
+  addHypothesis(incidentId: string, input: HypothesisInput): Promise<IncidentResponse | undefined> {
     return this.repository.addHypothesis(incidentId, input);
   }
 
