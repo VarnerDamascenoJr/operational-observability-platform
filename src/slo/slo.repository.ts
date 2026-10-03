@@ -5,6 +5,7 @@ import type {
   CreateSloInput,
   EvaluationObjectiveResult,
   LatestEvaluationRow,
+  ProcessControlOptions,
   ProjectRow,
   RollingEvaluationRow,
   RollingObjectiveResult,
@@ -16,13 +17,16 @@ import type {
   SloBurnRateResponse,
   SloDefinition,
   SloEvaluationResponse,
+  SloProcessControlResponse,
   SloRollingWindowsResponse,
   SloRow,
 } from './slo.types.js';
 import {
+  analyzeObjectiveProcessControl,
   calculateObjectiveBurnRate,
   calculateSliEvaluation,
   overallBurnRateSeverity,
+  overallProcessControlSeverity,
   overallSloStatus,
   summarizeRollingWindows,
 } from './slo.calculations.js';
@@ -349,6 +353,35 @@ export class SloRepository {
       objectives,
       overallSeverity: overallBurnRateSeverity(objectives),
       shortWindowCount: input.shortWindowCount,
+      slo: rollingWindows.slo,
+    };
+  }
+
+  async processControl(
+    sloId: string,
+    input: ProcessControlOptions & { limit: number },
+  ): Promise<SloProcessControlResponse | undefined> {
+    const rollingWindows = await this.rollingWindows(sloId, input.limit);
+
+    if (!rollingWindows) {
+      return undefined;
+    }
+
+    const options: ProcessControlOptions = {
+      baselineWindowCount: input.baselineWindowCount,
+      ewmaLambda: input.ewmaLambda,
+      sigmaMultiplier: input.sigmaMultiplier,
+      sustainedWindowCount: input.sustainedWindowCount,
+    };
+    const objectives = rollingWindows.objectives.map((objective) =>
+      analyzeObjectiveProcessControl(objective, objective.windows, options),
+    );
+
+    return {
+      limit: input.limit,
+      objectives,
+      options,
+      overallSeverity: overallProcessControlSeverity(objectives),
       slo: rollingWindows.slo,
     };
   }
