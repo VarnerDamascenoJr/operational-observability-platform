@@ -115,6 +115,44 @@ export function parseBurnRateWindowCounts(value: unknown): {
   return { longWindowCount, shortWindowCount };
 }
 
+export function parseProcessControlInput(value: unknown): {
+  baselineWindowCount: number;
+  ewmaLambda: number;
+  limit: number;
+  sigmaMultiplier: number;
+  sustainedWindowCount: number;
+} {
+  const query = requireRecord(value, 'Query params must be an object');
+
+  return {
+    baselineWindowCount: optionalInteger(query.baselineWindows, 'baselineWindows', {
+      defaultValue: 5,
+      maximum: 60,
+      minimum: 2,
+    }),
+    ewmaLambda: optionalNumber(query.lambda, 'lambda', {
+      defaultValue: 0.3,
+      maximum: 1,
+      minimum: 0.01,
+    }),
+    limit: optionalInteger(query.limit, 'limit', {
+      defaultValue: 14,
+      maximum: 90,
+      minimum: 3,
+    }),
+    sigmaMultiplier: optionalNumber(query.sigmaMultiplier, 'sigmaMultiplier', {
+      defaultValue: 3,
+      maximum: 6,
+      minimum: 1,
+    }),
+    sustainedWindowCount: optionalInteger(query.sustainedWindows, 'sustainedWindows', {
+      defaultValue: 3,
+      maximum: 10,
+      minimum: 2,
+    }),
+  };
+}
+
 function parseEvaluationSource(value: unknown): EvaluationSource {
   if (value === undefined) {
     return { kind: 'manual' };
@@ -255,6 +293,31 @@ function optionalInteger(
 
   const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
   return requiredInteger(parsed, field, range);
+}
+
+function optionalNumber(
+  value: unknown,
+  field: string,
+  range: { defaultValue: number; maximum: number; minimum: number },
+): number {
+  if (value === undefined) {
+    return range.defaultValue;
+  }
+
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+
+  if (
+    typeof parsed !== 'number' ||
+    !Number.isFinite(parsed) ||
+    parsed < range.minimum ||
+    parsed > range.maximum
+  ) {
+    throw new ValidationError(
+      `${field} must be a number between ${range.minimum} and ${range.maximum}`,
+    );
+  }
+
+  return round(parsed, 5);
 }
 
 function requiredIsoDate(value: unknown, field: string): string {
