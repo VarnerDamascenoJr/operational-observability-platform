@@ -39,6 +39,12 @@ export interface HypothesisInput {
   statement: string;
 }
 
+export interface HypothesisConfidenceAdjustmentInput {
+  evidenceId?: string;
+  reason: string;
+  scoreDelta: number;
+}
+
 export interface TimelineInput {
   description?: string;
   occurredAt?: string;
@@ -118,11 +124,24 @@ export interface EvidenceRow extends QueryResultRow {
 
 export interface HypothesisRow extends QueryResultRow {
   confidence: HypothesisConfidence;
+  confidence_score: string;
   created_at: Date;
   id: string;
   statement: string;
   status: HypothesisStatus;
   updated_at: Date;
+}
+
+export interface HypothesisConfidenceEventRow extends QueryResultRow {
+  created_at: Date;
+  evidence_id: string | null;
+  evidence_title: string | null;
+  hypothesis_id: string;
+  id: string;
+  next_score: string;
+  previous_score: string;
+  reason: string;
+  score_delta: string;
 }
 
 export interface TimelineRow extends QueryResultRow {
@@ -147,12 +166,26 @@ export interface IncidentResponse {
   }>;
   hypotheses: Array<{
     confidence: HypothesisConfidence;
+    confidenceHistory: Array<{
+      createdAt: string;
+      evidence?: {
+        id: string;
+        title: string;
+      };
+      id: string;
+      nextScore: number;
+      previousScore: number;
+      reason: string;
+      scoreDelta: number;
+    }>;
+    confidenceScore: number;
     createdAt: string;
     id: string;
     statement: string;
     status: HypothesisStatus;
     updatedAt: string;
   }>;
+  hypothesisSummary: HypothesisConfidenceSummary;
   id: string;
   preventiveActions?: string;
   project: {
@@ -188,4 +221,14 @@ export interface IncidentResponse {
   }>;
   title: string;
   updatedAt: string;
+}
+
+export interface HypothesisConfidenceSummary {
+  mostLikelyHypothesis: {
+    confidence: HypothesisConfidence;
+    confidenceScore: number;
+    id: string;
+    statement: string;
+  } | null;
+  remainingUncertainty: number;
 }
