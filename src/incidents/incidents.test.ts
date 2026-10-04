@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
+import { NotFoundError } from '../errors/not-found-error.js';
+import { ValidationError } from '../errors/validation-error.js';
 import {
   confidenceToScore,
   scoreToConfidence,
   summarizeHypothesisConfidence,
 } from './incidents.confidence.js';
+import type { IncidentRepository } from './incidents.repository.js';
 import { canTransitionIncidentStatus } from './incidents.rules.js';
+import { IncidentService } from './incidents.service.js';
 import type { IncidentResponse } from './incidents.types.js';
+import { parseIncidentListInput } from './incidents.validation.js';
 
 describe('incident status transitions', () => {
   it('allows an active incident to move through investigation states', () => {
@@ -19,6 +24,43 @@ describe('incident status transitions', () => {
     expect(canTransitionIncidentStatus('resolved', 'resolved')).toBe(true);
     expect(canTransitionIncidentStatus('resolved', 'investigating')).toBe(false);
     expect(canTransitionIncidentStatus('resolved', 'open')).toBe(false);
+  });
+});
+
+describe('incident list validation', () => {
+  it('applies a bounded default limit and decodes cursors', () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        createdAt: '2026-01-01T00:00:00.000Z',
+        detectedAt: '2026-01-01T00:00:00.000Z',
+        id: '00000000-0000-4000-8000-000000000001',
+      }),
+      'utf8',
+    ).toString('base64url');
+
+    expect(parseIncidentListInput({ cursor, limit: '25' })).toEqual({
+      cursor: {
+        createdAt: '2026-01-01T00:00:00.000Z',
+        detectedAt: '2026-01-01T00:00:00.000Z',
+        id: '00000000-0000-4000-8000-000000000001',
+      },
+      limit: 25,
+    });
+    expect(parseIncidentListInput({})).toEqual({ limit: 50 });
+    expect(() => parseIncidentListInput({ limit: '500' })).toThrow(ValidationError);
+    expect(() => parseIncidentListInput({ cursor: 'not-json' })).toThrow(ValidationError);
+  });
+});
+
+describe('incident service lookup', () => {
+  it('raises a not found error when an incident id is unknown', async () => {
+    const service = new IncidentService({
+      findById: async () => undefined,
+    } as unknown as IncidentRepository);
+
+    await expect(service.findById('00000000-0000-4000-8000-000000000000')).rejects.toThrow(
+      NotFoundError,
+    );
   });
 });
 

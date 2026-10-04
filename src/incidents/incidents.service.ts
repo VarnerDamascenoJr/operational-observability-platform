@@ -1,4 +1,5 @@
 import { ValidationError } from '../errors/validation-error.js';
+import { NotFoundError } from '../errors/not-found-error.js';
 import type { IncidentRepository } from './incidents.repository.js';
 import { canTransitionIncidentStatus } from './incidents.rules.js';
 import type {
@@ -6,6 +7,8 @@ import type {
   EvidenceInput,
   HypothesisConfidenceAdjustmentInput,
   HypothesisInput,
+  IncidentListInput,
+  IncidentListResponse,
   IncidentResponse,
   TimelineInput,
   UpdateIncidentInput,
@@ -18,12 +21,18 @@ export class IncidentService {
     return this.repository.create(input);
   }
 
-  list(): Promise<IncidentResponse[]> {
-    return this.repository.list();
+  list(input: IncidentListInput): Promise<IncidentListResponse> {
+    return this.repository.list(input);
   }
 
-  findById(incidentId: string): Promise<IncidentResponse | undefined> {
-    return this.repository.findById(incidentId);
+  async findById(incidentId: string): Promise<IncidentResponse> {
+    const incident = await this.repository.findById(incidentId);
+
+    if (!incident) {
+      throw new NotFoundError('Incident not found');
+    }
+
+    return incident;
   }
 
   async update(
