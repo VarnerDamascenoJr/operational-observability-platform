@@ -464,7 +464,11 @@ test('incident API preserves guided investigation state from alert to resolution
   expect(createIncidentResponse.status()).toBe(201);
   const created = (await createIncidentResponse.json()) as {
     evidence: Array<{ title: string; type: string }>;
-    hypotheses: Array<{ statement: string }>;
+    hypotheses: Array<{ confidenceScore: number; id: string; statement: string }>;
+    hypothesisSummary: {
+      mostLikelyHypothesis: { confidenceScore: number; id: string; statement: string };
+      remainingUncertainty: number;
+    };
     id: string;
     sloId: string;
     sourceAlert: { name: string };
@@ -487,8 +491,43 @@ test('incident API preserves guided investigation state from alert to resolution
       }),
     ]),
   );
+  expect(created.hypotheses[0]?.confidenceScore).toBe(0.5);
+  expect(created.hypothesisSummary).toEqual(
+    expect.objectContaining({
+      mostLikelyHypothesis: expect.objectContaining({
+        id: created.hypotheses[0]?.id,
+        statement: 'The dependency unavailable mode is driving user-visible failures.',
+      }),
+      remainingUncertainty: 0.5,
+    }),
+  );
   expect(created.timeline).toEqual(
     expect.arrayContaining([expect.objectContaining({ type: 'opened' })]),
+  );
+
+  const alternativeHypothesisResponse = await request.post(`/incidents/${created.id}/hypotheses`, {
+    data: {
+      confidence: 'low',
+      statement: 'A payment dependency regression is causing the failures.',
+    },
+  });
+  expect(alternativeHypothesisResponse.status()).toBe(201);
+  const withAlternativeHypothesis = (await alternativeHypothesisResponse.json()) as {
+    hypotheses: Array<{ confidenceScore: number; id: string; statement: string }>;
+  };
+  const alternativeHypothesis = withAlternativeHypothesis.hypotheses.find(
+    (hypothesis) =>
+      hypothesis.statement === 'A payment dependency regression is causing the failures.',
+  );
+  if (!alternativeHypothesis) {
+    throw new Error('Alternative hypothesis was not returned by the incident API');
+  }
+
+  expect(alternativeHypothesis).toEqual(
+    expect.objectContaining({
+      confidenceScore: 0.25,
+      statement: 'A payment dependency regression is causing the failures.',
+    }),
   );
 
   const investigatingResponse = await request.patch(`/incidents/${created.id}`, {
@@ -515,6 +554,81 @@ test('incident API preserves guided investigation state from alert to resolution
     },
   });
   expect(evidenceResponse.status()).toBe(201);
+  const withTraceEvidence = (await evidenceResponse.json()) as {
+    evidence: Array<{ id: string; title: string }>;
+  };
+  const traceEvidence = withTraceEvidence.evidence.find(
+    (evidence) => evidence.title === 'Tempo trace for failed transaction',
+  );
+  if (!traceEvidence) {
+    throw new Error('Trace evidence was not returned by the incident API');
+  }
+
+  expect(traceEvidence).toEqual(
+    expect.objectContaining({
+      title: 'Tempo trace for failed transaction',
+    }),
+  );
+
+  const confidenceResponse = await request.post(
+    `/incidents/${created.id}/hypotheses/${alternativeHypothesis.id}/confidence`,
+    {
+      data: {
+        evidenceId: traceEvidence.id,
+        reason: 'Trace evidence points at the payment dependency.',
+        scoreDelta: 0.7,
+      },
+    },
+  );
+
+  await expect(confidenceResponse).toBeOK();
+  const rankedIncident = (await confidenceResponse.json()) as {
+    hypotheses: Array<{
+      confidence: string;
+      confidenceHistory: Array<{
+        evidence?: { id: string; title: string };
+        reason: string;
+        scoreDelta: number;
+      }>;
+      confidenceScore: number;
+      id: string;
+    }>;
+    hypothesisSummary: {
+      mostLikelyHypothesis: { confidenceScore: number; id: string };
+      remainingUncertainty: number;
+    };
+  };
+  const promotedHypothesis = rankedIncident.hypotheses.find(
+    (hypothesis) => hypothesis.id === alternativeHypothesis.id,
+  );
+  expect(promotedHypothesis).toEqual(
+    expect.objectContaining({
+      confidence: 'high',
+      confidenceScore: 0.95,
+      id: alternativeHypothesis.id,
+    }),
+  );
+  expect(promotedHypothesis?.confidenceHistory).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        evidence: expect.objectContaining({
+          id: traceEvidence.id,
+          title: 'Tempo trace for failed transaction',
+        }),
+        reason: 'Trace evidence points at the payment dependency.',
+        scoreDelta: 0.7,
+      }),
+    ]),
+  );
+  expect(rankedIncident.hypothesisSummary).toEqual(
+    expect.objectContaining({
+      mostLikelyHypothesis: expect.objectContaining({
+        confidenceScore: 0.95,
+        id: alternativeHypothesis.id,
+      }),
+      remainingUncertainty: 0.05,
+    }),
+  );
 
   const resolvedResponse = await request.patch(`/incidents/${created.id}`, {
     data: {
