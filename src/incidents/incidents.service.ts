@@ -1,7 +1,5 @@
-import { ValidationError } from '../errors/validation-error.js';
 import { NotFoundError } from '../errors/not-found-error.js';
 import type { IncidentRepository } from './incidents.repository.js';
-import { canTransitionIncidentStatus } from './incidents.rules.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
@@ -39,29 +37,7 @@ export class IncidentService {
     incidentId: string,
     input: UpdateIncidentInput,
   ): Promise<IncidentResponse | undefined> {
-    const current = await this.repository.findById(incidentId);
-
-    if (!current) {
-      return undefined;
-    }
-
-    const nextStatus = input.status ?? current.status;
-
-    if (!canTransitionIncidentStatus(current.status, nextStatus)) {
-      throw new ValidationError(`Incident cannot move from ${current.status} to ${nextStatus}`);
-    }
-
-    if (nextStatus === 'resolved') {
-      if (!input.rootCause && !current.rootCause) {
-        throw new ValidationError('rootCause is required when resolving an incident');
-      }
-
-      if (!input.preventiveActions && !current.preventiveActions) {
-        throw new ValidationError('preventiveActions is required when resolving an incident');
-      }
-    }
-
-    return this.repository.updateExisting(incidentId, input, current);
+    return this.repository.update(incidentId, input);
   }
 
   addEvidence(incidentId: string, input: EvidenceInput): Promise<IncidentResponse | undefined> {

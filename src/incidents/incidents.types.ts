@@ -99,7 +99,9 @@ export interface ServiceRow extends QueryResultRow {
 
 export interface IncidentRow extends QueryResultRow {
   created_at: Date;
+  created_at_cursor: string;
   detected_at: Date;
+  detected_at_cursor: string;
   id: string;
   preventive_actions: string | null;
   project_id: string;
@@ -128,6 +130,7 @@ export interface EvidenceRow extends QueryResultRow {
   description: string | null;
   evidence_type: EvidenceType;
   id: string;
+  incident_id: string;
   title: string;
   url: string | null;
 }
@@ -137,6 +140,7 @@ export interface HypothesisRow extends QueryResultRow {
   confidence_score: string;
   created_at: Date;
   id: string;
+  incident_id: string;
   statement: string;
   status: HypothesisStatus;
   updated_at: Date;
@@ -148,6 +152,7 @@ export interface HypothesisConfidenceEventRow extends QueryResultRow {
   evidence_title: string | null;
   hypothesis_id: string;
   id: string;
+  incident_id: string;
   next_score: string;
   previous_score: string;
   reason: string;
@@ -159,6 +164,7 @@ export interface TimelineRow extends QueryResultRow {
   description: string | null;
   event_type: TimelineEventType;
   id: string;
+  incident_id: string;
   occurred_at: Date;
   title: string;
 }

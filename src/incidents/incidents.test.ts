@@ -50,6 +50,26 @@ describe('incident list validation', () => {
     expect(() => parseIncidentListInput({ limit: '500' })).toThrow(ValidationError);
     expect(() => parseIncidentListInput({ cursor: 'not-json' })).toThrow(ValidationError);
   });
+
+  it('preserves PostgreSQL microsecond precision in decoded cursors', () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        createdAt: '2026-01-01T00:00:00.123456Z',
+        detectedAt: '2026-01-01T00:00:00.654321Z',
+        id: '00000000-0000-4000-8000-000000000001',
+      }),
+      'utf8',
+    ).toString('base64url');
+
+    expect(parseIncidentListInput({ cursor })).toEqual({
+      cursor: {
+        createdAt: '2026-01-01T00:00:00.123456Z',
+        detectedAt: '2026-01-01T00:00:00.654321Z',
+        id: '00000000-0000-4000-8000-000000000001',
+      },
+      limit: 50,
+    });
+  });
 });
 
 describe('incident service lookup', () => {
