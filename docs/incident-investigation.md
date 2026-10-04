@@ -55,6 +55,9 @@ sem misturar tudo no resumo:
 - `POST /incidents/<incident-id>/evidence` para dashboards, traces, logs,
   runbooks, alertas e notas.
 - `POST /incidents/<incident-id>/hypotheses` para registrar causas candidatas.
+- `POST /incidents/<incident-id>/hypotheses/<hypothesis-id>/confidence` para
+  ajustar a confianca numerica de uma hipotese com uma justificativa e,
+  opcionalmente, uma evidencia associada.
 - `POST /incidents/<incident-id>/timeline` para decisoes e observacoes
   ordenadas.
 
@@ -67,6 +70,34 @@ Estados aceitos:
 
 Um incidente `resolved` nao volta para estados ativos. Isso mantem o historico
 de encerramento estavel.
+
+### Confianca de hipoteses
+
+Cada hipotese mantem a confianca qualitativa (`low`, `medium`, `high`) e um
+`confidenceScore` de 0 a 1 usado para ranking. Ao abrir ou adicionar uma
+hipotese, a confianca inicial vira score automaticamente:
+
+- `low`: `0.25`
+- `medium`: `0.5`
+- `high`: `0.75`
+
+Quando uma evidencia reforca ou enfraquece uma hipotese, envie um delta entre
+`-1` e `1`:
+
+```bash
+curl --request POST \
+  http://localhost:3000/incidents/<incident-id>/hypotheses/<hypothesis-id>/confidence \
+  --header 'content-type: application/json' \
+  --data '{
+    "evidenceId": "00000000-0000-4000-8000-000000000000",
+    "scoreDelta": 0.2,
+    "reason": "Trace evidence points at the payment dependency."
+  }'
+```
+
+A resposta do incidente inclui `confidenceHistory` em cada hipotese e
+`hypothesisSummary`, com a hipotese ativa mais provavel e a incerteza restante.
+Hipoteses rejeitadas ficam no historico, mas nao entram no resumo de ranking.
 
 ## Encerrar
 

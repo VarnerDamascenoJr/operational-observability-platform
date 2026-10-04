@@ -14,6 +14,7 @@ import { registerObservabilityHooks } from './observability/observability.hooks.
 import { registerSloRoutes } from './slo/slo.controller.js';
 import { NoopTelemetryExporter } from './observability/otlp.js';
 import { decorateObservabilityRequest } from './observability/correlation.fastify.js';
+import { registerHttpErrorHandler } from './errors/http.js';
 
 export function buildApp(options: BuildAppOptions = {}) {
   const identity = options.identity ?? loadServiceIdentity();
@@ -53,6 +54,7 @@ export function buildApp(options: BuildAppOptions = {}) {
 
   void app.register(helmet);
   void app.register(sensible);
+  registerHttpErrorHandler(app);
   decorateObservabilityRequest(app);
   registerObservabilityHooks(app, metrics);
 

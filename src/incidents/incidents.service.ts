@@ -4,6 +4,7 @@ import { canTransitionIncidentStatus } from './incidents.rules.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
+  HypothesisConfidenceAdjustmentInput,
   HypothesisInput,
   IncidentResponse,
   TimelineInput,
@@ -60,6 +61,14 @@ export class IncidentService {
 
   addHypothesis(incidentId: string, input: HypothesisInput): Promise<IncidentResponse | undefined> {
     return this.repository.addHypothesis(incidentId, input);
+  }
+
+  adjustHypothesisConfidence(
+    incidentId: string,
+    hypothesisId: string,
+    input: HypothesisConfidenceAdjustmentInput,
+  ): Promise<IncidentResponse | undefined> {
+    return this.repository.adjustHypothesisConfidence(incidentId, hypothesisId, input);
   }
 
   addTimelineEvent(

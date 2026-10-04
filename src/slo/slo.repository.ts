@@ -1,5 +1,6 @@
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
+import { requiredString, requireRecord } from '../validation/primitives.js';
 import type {
   CreateEvaluationInput,
   CreateSloInput,
@@ -570,22 +571,6 @@ function parseObjectiveRows(value: unknown): SliObjective[] {
       },
     ];
   });
-}
-
-function requireRecord(value: unknown, message: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new ValidationError(message);
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new ValidationError(`${field} must be a non-empty string`);
-  }
-
-  return value.trim();
 }
 
 function requireSingleRow<Row>(rows: Row[], message: string): Row {

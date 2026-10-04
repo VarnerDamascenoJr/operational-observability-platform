@@ -1,8 +1,17 @@
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
+import {
+  clampConfidenceScore,
+  confidenceToScore,
+  roundConfidenceScore,
+  scoreToConfidence,
+  summarizeHypothesisConfidence,
+} from './incidents.confidence.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
+  HypothesisConfidenceAdjustmentInput,
+  HypothesisConfidenceEventRow,
   EvidenceRow,
   HypothesisInput,
   HypothesisRow,
@@ -186,6 +195,54 @@ export class IncidentRepository {
     return this.findById(incidentId);
   }
 
+  async adjustHypothesisConfidence(
+    incidentId: string,
+    hypothesisId: string,
+    input: HypothesisConfidenceAdjustmentInput,
+  ): Promise<IncidentResponse | undefined> {
+    const currentResult = await this.database.query<{
+      confidence_score: string;
+      id: string;
+    }>(
+      `SELECT id, confidence_score
+       FROM control_plane.incident_hypotheses
+       WHERE id = $1 AND incident_id = $2`,
+      [hypothesisId, incidentId],
+    );
+    const current = currentResult.rows[0];
+
+    if (!current) {
+      return undefined;
+    }
+
+    if (input.evidenceId) {
+      await this.ensureEvidenceBelongsToIncident(input.evidenceId, incidentId);
+    }
+
+    const previousScore = Number(current.confidence_score);
+    const nextScore = clampConfidenceScore(previousScore + input.scoreDelta);
+    const scoreDelta = roundConfidenceScore(nextScore - previousScore);
+    const confidence = scoreToConfidence(nextScore);
+
+    await this.database.query(
+      `UPDATE control_plane.incident_hypotheses
+       SET confidence = $3,
+           confidence_score = $4,
+           updated_at = now()
+       WHERE id = $1 AND incident_id = $2`,
+      [hypothesisId, incidentId, confidence, nextScore],
+    );
+    await this.insertHypothesisConfidenceEvent(incidentId, hypothesisId, {
+      evidenceId: input.evidenceId,
+      nextScore,
+      previousScore,
+      reason: input.reason,
+      scoreDelta,
+    });
+
+    return this.findById(incidentId);
+  }
+
   async addTimelineEvent(
     incidentId: string,
     input: TimelineInput,
@@ -199,31 +256,56 @@ export class IncidentRepository {
   }
 
   private async hydrate(row: IncidentRow): Promise<IncidentResponse> {
-    const [evidenceResult, hypothesesResult, timelineResult] = await Promise.all([
-      this.database.query<EvidenceRow>(
-        `SELECT id, evidence_type, title, url, description, created_at
+    const [evidenceResult, hypothesesResult, confidenceHistoryResult, timelineResult] =
+      await Promise.all([
+        this.database.query<EvidenceRow>(
+          `SELECT id, evidence_type, title, url, description, created_at
          FROM control_plane.incident_evidences
          WHERE incident_id = $1
          ORDER BY created_at, id`,
-        [row.id],
-      ),
-      this.database.query<HypothesisRow>(
-        `SELECT id, statement, confidence, status, created_at, updated_at
+          [row.id],
+        ),
+        this.database.query<HypothesisRow>(
+          `SELECT id, statement, confidence, confidence_score, status, created_at, updated_at
          FROM control_plane.incident_hypotheses
          WHERE incident_id = $1
          ORDER BY created_at, id`,
-        [row.id],
-      ),
-      this.database.query<TimelineRow>(
-        `SELECT id, event_type, title, description, occurred_at, created_at
+          [row.id],
+        ),
+        this.database.query<HypothesisConfidenceEventRow>(
+          `SELECT
+           confidence_event.id,
+           confidence_event.hypothesis_id,
+           confidence_event.evidence_id,
+           evidence.title AS evidence_title,
+           confidence_event.previous_score,
+           confidence_event.score_delta,
+           confidence_event.next_score,
+           confidence_event.reason,
+           confidence_event.created_at
+         FROM control_plane.incident_hypothesis_confidence_events confidence_event
+         LEFT JOIN control_plane.incident_evidences evidence
+           ON evidence.id = confidence_event.evidence_id
+         WHERE confidence_event.incident_id = $1
+         ORDER BY confidence_event.created_at, confidence_event.id`,
+          [row.id],
+        ),
+        this.database.query<TimelineRow>(
+          `SELECT id, event_type, title, description, occurred_at, created_at
          FROM control_plane.incident_timeline_events
          WHERE incident_id = $1
          ORDER BY occurred_at, created_at, id`,
-        [row.id],
-      ),
-    ]);
+          [row.id],
+        ),
+      ]);
 
-    return mapIncident(row, evidenceResult.rows, hypothesesResult.rows, timelineResult.rows);
+    return mapIncident(
+      row,
+      evidenceResult.rows,
+      hypothesesResult.rows,
+      confidenceHistoryResult.rows,
+      timelineResult.rows,
+    );
   }
 
   private async exists(incidentId: string): Promise<boolean> {
@@ -245,6 +327,20 @@ export class IncidentRepository {
     }
   }
 
+  private async ensureEvidenceBelongsToIncident(
+    evidenceId: string,
+    incidentId: string,
+  ): Promise<void> {
+    const result = await this.database.query<{ exists: boolean }>(
+      'SELECT EXISTS (SELECT 1 FROM control_plane.incident_evidences WHERE id = $1 AND incident_id = $2) AS exists',
+      [evidenceId, incidentId],
+    );
+
+    if (!result.rows[0]?.exists) {
+      throw new ValidationError('evidenceId must belong to the incident');
+    }
+  }
+
   private async insertEvidence(incidentId: string, input: EvidenceInput): Promise<void> {
     await this.database.query(
       `INSERT INTO control_plane.incident_evidences (
@@ -255,11 +351,54 @@ export class IncidentRepository {
   }
 
   private async insertHypothesis(incidentId: string, input: HypothesisInput): Promise<void> {
-    await this.database.query(
+    const confidenceScore = confidenceToScore(input.confidence);
+    const result = await this.database.query<{ id: string }>(
       `INSERT INTO control_plane.incident_hypotheses (
-         incident_id, statement, confidence
-       ) VALUES ($1, $2, $3)`,
-      [incidentId, input.statement, input.confidence],
+         incident_id, statement, confidence, confidence_score
+       ) VALUES ($1, $2, $3, $4)
+       RETURNING id`,
+      [incidentId, input.statement, input.confidence, confidenceScore],
+    );
+    const hypothesisId = requireSingleRow(result.rows, 'Hypothesis was not persisted').id;
+
+    await this.insertHypothesisConfidenceEvent(incidentId, hypothesisId, {
+      nextScore: confidenceScore,
+      previousScore: confidenceScore,
+      reason: `Initial ${input.confidence} confidence`,
+      scoreDelta: 0,
+    });
+  }
+
+  private async insertHypothesisConfidenceEvent(
+    incidentId: string,
+    hypothesisId: string,
+    input: {
+      evidenceId?: string;
+      nextScore: number;
+      previousScore: number;
+      reason: string;
+      scoreDelta: number;
+    },
+  ): Promise<void> {
+    await this.database.query(
+      `INSERT INTO control_plane.incident_hypothesis_confidence_events (
+         incident_id,
+         hypothesis_id,
+         evidence_id,
+         previous_score,
+         score_delta,
+         next_score,
+         reason
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        incidentId,
+        hypothesisId,
+        input.evidenceId ?? null,
+        input.previousScore,
+        input.scoreDelta,
+        input.nextScore,
+        input.reason,
+      ],
     );
   }
 
@@ -346,13 +485,17 @@ function mapIncident(
   row: IncidentRow,
   evidenceRows: EvidenceRow[],
   hypothesisRows: HypothesisRow[],
+  confidenceHistoryRows: HypothesisConfidenceEventRow[],
   timelineRows: TimelineRow[],
 ): IncidentResponse {
+  const hypotheses = hypothesisRows.map((row) => mapHypothesis(row, confidenceHistoryRows));
+
   return {
     createdAt: row.created_at.toISOString(),
     detectedAt: row.detected_at.toISOString(),
     evidence: evidenceRows.map(mapEvidence),
-    hypotheses: hypothesisRows.map(mapHypothesis),
+    hypotheses,
+    hypothesisSummary: summarizeHypothesisConfidence(hypotheses),
     id: row.id,
     ...(row.preventive_actions ? { preventiveActions: row.preventive_actions } : {}),
     project: {
@@ -399,14 +542,42 @@ function mapEvidence(row: EvidenceRow): IncidentResponse['evidence'][number] {
   };
 }
 
-function mapHypothesis(row: HypothesisRow): IncidentResponse['hypotheses'][number] {
+function mapHypothesis(
+  row: HypothesisRow,
+  confidenceHistoryRows: HypothesisConfidenceEventRow[],
+): IncidentResponse['hypotheses'][number] {
   return {
     confidence: row.confidence,
+    confidenceHistory: confidenceHistoryRows
+      .filter((history) => history.hypothesis_id === row.id)
+      .map(mapHypothesisConfidenceEvent),
+    confidenceScore: Number(row.confidence_score),
     createdAt: row.created_at.toISOString(),
     id: row.id,
     statement: row.statement,
     status: row.status,
     updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+function mapHypothesisConfidenceEvent(
+  row: HypothesisConfidenceEventRow,
+): IncidentResponse['hypotheses'][number]['confidenceHistory'][number] {
+  return {
+    createdAt: row.created_at.toISOString(),
+    ...(row.evidence_id && row.evidence_title
+      ? {
+          evidence: {
+            id: row.evidence_id,
+            title: row.evidence_title,
+          },
+        }
+      : {}),
+    id: row.id,
+    nextScore: Number(row.next_score),
+    previousScore: Number(row.previous_score),
+    reason: row.reason,
+    scoreDelta: Number(row.score_delta),
   };
 }
 

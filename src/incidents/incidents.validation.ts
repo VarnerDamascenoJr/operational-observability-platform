@@ -1,8 +1,22 @@
 import { ValidationError } from '../errors/validation-error.js';
+import { isNil } from '../utils/presence.js';
+import {
+  optionalString,
+  optionalUuid,
+  parseOptionalArray,
+  requiredEnum,
+  requiredIsoDate,
+  requiredNumber,
+  requiredSlug,
+  requiredString,
+  requiredUuid,
+  requireRecord,
+} from '../validation/primitives.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
   EvidenceType,
+  HypothesisConfidenceAdjustmentInput,
   HypothesisConfidence,
   HypothesisInput,
   IncidentSeverity,
@@ -12,7 +26,6 @@ import type {
   TimelineInput,
   UpdateIncidentInput,
 } from './incidents.types.js';
-import { slugPattern, uuidPattern } from '../validation/patterns.js';
 
 export function parseCreateIncidentInput(value: unknown): CreateIncidentInput {
   const body = requireRecord(value, 'Request body must be an object');
@@ -80,6 +93,18 @@ export function parseHypothesisInput(value: unknown): HypothesisInput {
   };
 }
 
+export function parseHypothesisConfidenceAdjustmentInput(
+  value: unknown,
+): HypothesisConfidenceAdjustmentInput {
+  const body = requireRecord(value, 'hypothesis confidence adjustment must be an object');
+
+  return {
+    evidenceId: optionalUuid(body.evidenceId, 'hypothesisConfidence.evidenceId'),
+    reason: requiredString(body.reason, 'hypothesisConfidence.reason'),
+    scoreDelta: requiredConfidenceDelta(body.scoreDelta, 'hypothesisConfidence.scoreDelta'),
+  };
+}
+
 export function parseTimelineInput(value: unknown): TimelineInput {
   const body = requireRecord(value, 'timeline event must be an object');
 
@@ -99,8 +124,20 @@ export function parseIncidentId(value: unknown): string {
   return requiredUuid(params.incidentId, 'incidentId');
 }
 
+export function parseIncidentHypothesisIds(value: unknown): {
+  hypothesisId: string;
+  incidentId: string;
+} {
+  const params = requireRecord(value, 'Route params must be an object');
+
+  return {
+    hypothesisId: requiredUuid(params.hypothesisId, 'hypothesisId'),
+    incidentId: requiredUuid(params.incidentId, 'incidentId'),
+  };
+}
+
 function parseOptionalSourceAlert(value: unknown): SourceAlertInput | undefined {
-  if (value === undefined || value === null) {
+  if (isNil(value)) {
     return undefined;
   }
 
@@ -113,74 +150,10 @@ function parseOptionalSourceAlert(value: unknown): SourceAlertInput | undefined 
   };
 }
 
-function parseOptionalArray<Item>(value: unknown, parser: (entry: unknown) => Item): Item[] {
-  if (value === undefined || value === null) {
-    return [];
-  }
-
-  if (!Array.isArray(value)) {
-    throw new ValidationError('Expected an array');
-  }
-
-  return value.map(parser);
-}
-
-function requireRecord(value: unknown, message: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new ValidationError(message);
-  }
-
-  return value as Record<string, unknown>;
-}
-
-function requiredString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new ValidationError(`${field} must be a non-empty string`);
-  }
-
-  return value.trim();
-}
-
-function optionalString(value: unknown, field: string): string | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  return requiredString(value, field);
-}
-
-function requiredSlug(value: unknown, field: string): string {
-  const slug = requiredString(value, field);
-
-  if (!slugPattern.test(slug)) {
-    throw new ValidationError(`${field} must be a safe slug`);
-  }
-
-  return slug;
-}
-
-function requiredUuid(value: unknown, field: string): string {
-  const id = requiredString(value, field);
-
-  if (!uuidPattern.test(id)) {
-    throw new ValidationError(`${field} must be a UUID`);
-  }
-
-  return id;
-}
-
-function optionalUuid(value: unknown, field: string): string | undefined {
-  if (value === undefined || value === null) {
-    return undefined;
-  }
-
-  return requiredUuid(value, field);
-}
-
 function optionalUrl(value: unknown, field: string): string | undefined {
   const url = optionalString(value, field);
 
-  if (!url) {
+  if (url === undefined) {
     return undefined;
   }
 
@@ -197,74 +170,52 @@ function optionalUrl(value: unknown, field: string): string | undefined {
   return url;
 }
 
-function requiredIsoDate(value: unknown, field: string): string {
-  const text = requiredString(value, field);
-  const time = Date.parse(text);
+function requiredConfidenceDelta(value: unknown, field: string): number {
+  const delta = requiredNumber(value, field);
 
-  if (!Number.isFinite(time)) {
-    throw new ValidationError(`${field} must be a valid ISO date`);
+  if (delta < -1 || delta > 1 || delta === 0) {
+    throw new ValidationError(`${field} must be between -1 and 1 and cannot be zero`);
   }
 
-  return new Date(time).toISOString();
+  return Math.round(delta * 10000) / 10000;
 }
 
 function requiredIncidentSeverity(value: unknown, field: string): IncidentSeverity {
-  if (value === 'critical' || value === 'info' || value === 'page' || value === 'warning') {
-    return value;
-  }
-
-  throw new ValidationError(`${field} must be info, warning, page or critical`);
+  return requiredEnum(
+    value,
+    field,
+    ['info', 'warning', 'page', 'critical'] as const,
+    'info, warning, page or critical',
+  );
 }
 
 function requiredIncidentStatus(value: unknown, field: string): IncidentStatus {
-  if (
-    value === 'investigating' ||
-    value === 'mitigated' ||
-    value === 'open' ||
-    value === 'resolved'
-  ) {
-    return value;
-  }
-
-  throw new ValidationError(`${field} must be open, investigating, mitigated or resolved`);
+  return requiredEnum(
+    value,
+    field,
+    ['open', 'investigating', 'mitigated', 'resolved'] as const,
+    'open, investigating, mitigated or resolved',
+  );
 }
 
 function requiredEvidenceType(value: unknown, field: string): EvidenceType {
-  if (
-    value === 'alert' ||
-    value === 'dashboard' ||
-    value === 'log' ||
-    value === 'note' ||
-    value === 'runbook' ||
-    value === 'trace'
-  ) {
-    return value;
-  }
-
-  throw new ValidationError(`${field} must be alert, dashboard, trace, log, runbook or note`);
+  return requiredEnum(
+    value,
+    field,
+    ['alert', 'dashboard', 'trace', 'log', 'runbook', 'note'] as const,
+    'alert, dashboard, trace, log, runbook or note',
+  );
 }
 
 function requiredHypothesisConfidence(value: unknown, field: string): HypothesisConfidence {
-  if (value === 'high' || value === 'low' || value === 'medium') {
-    return value;
-  }
-
-  throw new ValidationError(`${field} must be low, medium or high`);
+  return requiredEnum(value, field, ['low', 'medium', 'high'] as const, 'low, medium or high');
 }
 
 function requiredTimelineEventType(value: unknown, field: string): TimelineEventType {
-  if (
-    value === 'evidence_added' ||
-    value === 'hypothesis_added' ||
-    value === 'note' ||
-    value === 'opened' ||
-    value === 'resolved' ||
-    value === 'status_changed'
-  ) {
-    return value;
-  }
-
-  throw new ValidationError(
-    `${field} must be opened, status_changed, evidence_added, hypothesis_added, note or resolved`,
+  return requiredEnum(
+    value,
+    field,
+    ['opened', 'status_changed', 'evidence_added', 'hypothesis_added', 'note', 'resolved'] as const,
+    'opened, status_changed, evidence_added, hypothesis_added, note or resolved',
   );
 }
