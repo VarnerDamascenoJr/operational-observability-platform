@@ -1,6 +1,6 @@
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
-import { encodePaginationCursor } from '../pagination/pagination.validation.js';
+import { encodePaginationCursor } from '../common/pagination/pagination.validation.js';
 import {
   clampConfidenceScore,
   confidenceToScore,

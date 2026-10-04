@@ -1,11 +1,11 @@
-import { ValidationError } from '../errors/validation-error.js';
-import { isNil } from '../utils/presence.js';
+import { ValidationError } from '../../errors/validation-error.js';
+import { isNil } from '../../utils/presence.js';
 import {
   parseStringNumber,
   requiredInteger,
   requiredString,
   requireRecord,
-} from '../validation/primitives.js';
+} from '../../validation/primitives.js';
 import type { PaginationInput } from './pagination.types.js';
 
 export interface PaginationQueryOptions<Cursor> {

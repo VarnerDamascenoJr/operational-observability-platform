@@ -1,6 +1,6 @@
 import type { QueryResultRow } from 'pg';
 
-import type { PaginationInput, PaginationResponse } from '../pagination/pagination.types.js';
+import type { PaginationInput, PaginationResponse } from '../common/pagination/pagination.types.js';
 
 export type IncidentSeverity = 'critical' | 'info' | 'page' | 'warning';
 export type IncidentStatus = 'investigating' | 'mitigated' | 'open' | 'resolved';

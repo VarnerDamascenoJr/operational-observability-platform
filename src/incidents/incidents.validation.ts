@@ -2,7 +2,7 @@ import { ValidationError } from '../errors/validation-error.js';
 import {
   decodePaginationCursor,
   parsePaginationInput,
-} from '../pagination/pagination.validation.js';
+} from '../common/pagination/pagination.validation.js';
 import { isNil } from '../utils/presence.js';
 import {
   optionalString,
