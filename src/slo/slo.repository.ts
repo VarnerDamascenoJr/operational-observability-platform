@@ -32,10 +32,18 @@ import {
   summarizeRollingWindows,
 } from './slo.calculations.js';
 
+interface TransactionalSqlExecutor extends SqlExecutor {
+  transaction?<Result>(work: (transaction: SqlExecutor) => Promise<Result>): Promise<Result>;
+}
+
 export class SloRepository {
-  constructor(private readonly database: SqlExecutor) {}
+  constructor(private readonly database: TransactionalSqlExecutor) {}
 
   async upsert(input: CreateSloInput): Promise<SloDefinition> {
+    return this.withTransaction((repository) => repository.upsertInTransaction(input));
+  }
+
+  private async upsertInTransaction(input: CreateSloInput): Promise<SloDefinition> {
     const project = await this.upsertProject(input.project);
     const service = await this.upsertService(project.id, input.service);
     const slo = await this.database.query<{ id: string }>(
@@ -71,6 +79,11 @@ export class SloRepository {
       );
     }
 
+    await this.deleteRemovedObjectives(
+      sloId,
+      input.objectives.map((objective) => objective.type),
+    );
+
     const persisted = await this.findById(sloId);
 
     if (!persisted) {
@@ -86,6 +99,13 @@ export class SloRepository {
   }
 
   async evaluate(
+    sloId: string,
+    input: CreateEvaluationInput,
+  ): Promise<SloEvaluationResponse | undefined> {
+    return this.withTransaction((repository) => repository.evaluateInTransaction(sloId, input));
+  }
+
+  private async evaluateInTransaction(
     sloId: string,
     input: CreateEvaluationInput,
   ): Promise<SloEvaluationResponse | undefined> {
@@ -393,6 +413,25 @@ export class SloRepository {
     ]);
     const row = result.rows[0];
     return row ? mapSloDefinition(row) : undefined;
+  }
+
+  private withTransaction<Result>(
+    work: (repository: SloRepository) => Promise<Result>,
+  ): Promise<Result> {
+    if (!this.database.transaction) {
+      return work(this);
+    }
+
+    return this.database.transaction((transaction) => work(new SloRepository(transaction)));
+  }
+
+  private async deleteRemovedObjectives(sloId: string, objectiveTypes: SliType[]): Promise<void> {
+    await this.database.query(
+      `DELETE FROM control_plane.sli_definitions
+       WHERE slo_id = $1
+         AND indicator_type <> ALL($2::text[])`,
+      [sloId, objectiveTypes],
+    );
   }
 
   private async persistEvaluationWindow(

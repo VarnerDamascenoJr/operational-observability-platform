@@ -395,6 +395,94 @@ test('SLO API configures objectives and calculates error budget state', async ({
   );
 });
 
+test('SLO API replaces removed objectives on reconfiguration', async ({ request }) => {
+  const sloSlug = `reconfigured-slo-${Date.now()}`;
+  const basePayload = {
+    project: {
+      slug: 'portfolio-observability',
+      name: 'Portfolio Observability',
+    },
+    service: {
+      slug: 'operational-observability-platform',
+      name: 'Operational Observability Platform',
+      environment: 'e2e',
+      owner: 'platform',
+    },
+    slug: sloSlug,
+    name: 'Reconfigured SLO',
+    windowDays: 7,
+  };
+
+  const createResponse = await request.post('/slos', {
+    data: {
+      ...basePayload,
+      objectives: [
+        {
+          type: 'availability',
+          targetPercentage: 99,
+        },
+        {
+          type: 'latency',
+          targetPercentage: 95,
+          latencyThresholdMilliseconds: 500,
+        },
+      ],
+    },
+  });
+  expect(createResponse.status()).toBe(201);
+  const created = (await createResponse.json()) as {
+    id: string;
+    objectives: Array<{ type: string }>;
+  };
+  expect(created.objectives.map((objective) => objective.type).sort()).toEqual([
+    'availability',
+    'latency',
+  ]);
+
+  const reconfigureResponse = await request.post('/slos', {
+    data: {
+      ...basePayload,
+      objectives: [
+        {
+          type: 'availability',
+          targetPercentage: 98,
+        },
+      ],
+    },
+  });
+  expect(reconfigureResponse.status()).toBe(201);
+  const reconfigured = (await reconfigureResponse.json()) as {
+    id: string;
+    objectives: Array<{ targetPercentage: number; type: string }>;
+  };
+  expect(reconfigured.id).toBe(created.id);
+  expect(reconfigured.objectives).toEqual([
+    expect.objectContaining({
+      targetPercentage: 98,
+      type: 'availability',
+    }),
+  ]);
+
+  const evaluationResponse = await request.post(`/slos/${created.id}/evaluations`, {
+    data: {
+      windowStartedAt: '2026-09-16T00:00:00.000Z',
+      windowEndedAt: '2026-09-17T00:00:00.000Z',
+      indicators: {
+        availability: {
+          totalEvents: 1_000,
+          goodEvents: 990,
+        },
+      },
+    },
+  });
+
+  expect(evaluationResponse.status()).toBe(201);
+  const evaluation = (await evaluationResponse.json()) as {
+    objectives: Array<{ type: string }>;
+  };
+  expect(evaluation.objectives).toEqual([expect.objectContaining({ type: 'availability' })]);
+});
+
 test('incident API preserves guided investigation state from alert to resolution', async ({
   request,
 }) => {
