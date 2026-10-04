@@ -8,6 +8,7 @@ import {
   scoreToConfidence,
   summarizeHypothesisConfidence,
 } from './incidents.confidence.js';
+import { canTransitionIncidentStatus } from './incidents.rules.js';
 import type {
   CreateIncidentInput,
   EvidenceInput,
@@ -30,10 +31,18 @@ import type {
   UpdateIncidentInput,
 } from './incidents.types.js';
 
+interface TransactionalSqlExecutor extends SqlExecutor {
+  transaction?<Result>(work: (transaction: SqlExecutor) => Promise<Result>): Promise<Result>;
+}
+
 export class IncidentRepository {
-  constructor(private readonly database: SqlExecutor) {}
+  constructor(private readonly database: TransactionalSqlExecutor) {}
 
   async create(input: CreateIncidentInput): Promise<IncidentResponse> {
+    return this.withTransaction((repository) => repository.createInTransaction(input));
+  }
+
+  private async createInTransaction(input: CreateIncidentInput): Promise<IncidentResponse> {
     const project = await this.upsertProject(input.project);
     const service = await this.upsertService(project.id, input.service);
 
@@ -131,7 +140,7 @@ export class IncidentRepository {
       parameters,
     );
     const pageRows = result.rows.slice(0, input.limit);
-    const incidents = await Promise.all(pageRows.map((row) => this.hydrate(row)));
+    const incidents = await this.hydrateMany(pageRows);
 
     return {
       incidents,
@@ -151,12 +160,35 @@ export class IncidentRepository {
     return row ? this.hydrate(row) : undefined;
   }
 
-  async updateExisting(
+  update(incidentId: string, input: UpdateIncidentInput): Promise<IncidentResponse | undefined> {
+    return this.withTransaction((repository) => repository.updateInTransaction(incidentId, input));
+  }
+
+  private async updateInTransaction(
     incidentId: string,
     input: UpdateIncidentInput,
-    current: IncidentResponse,
-  ): Promise<IncidentResponse> {
+  ): Promise<IncidentResponse | undefined> {
+    const current = await this.findByIdForUpdate(incidentId);
+
+    if (!current) {
+      return undefined;
+    }
+
     const nextStatus = input.status ?? current.status;
+
+    if (!canTransitionIncidentStatus(current.status, nextStatus)) {
+      throw new ValidationError(`Incident cannot move from ${current.status} to ${nextStatus}`);
+    }
+
+    if (nextStatus === 'resolved') {
+      if (!input.rootCause && !current.rootCause) {
+        throw new ValidationError('rootCause is required when resolving an incident');
+      }
+
+      if (!input.preventiveActions && !current.preventiveActions) {
+        throw new ValidationError('preventiveActions is required when resolving an incident');
+      }
+    }
 
     await this.database.query(
       `UPDATE control_plane.incidents
@@ -206,6 +238,15 @@ export class IncidentRepository {
     incidentId: string,
     input: EvidenceInput,
   ): Promise<IncidentResponse | undefined> {
+    return this.withTransaction((repository) =>
+      repository.addEvidenceInTransaction(incidentId, input),
+    );
+  }
+
+  private async addEvidenceInTransaction(
+    incidentId: string,
+    input: EvidenceInput,
+  ): Promise<IncidentResponse | undefined> {
     if (!(await this.exists(incidentId))) {
       return undefined;
     }
@@ -220,6 +261,15 @@ export class IncidentRepository {
   }
 
   async addHypothesis(
+    incidentId: string,
+    input: HypothesisInput,
+  ): Promise<IncidentResponse | undefined> {
+    return this.withTransaction((repository) =>
+      repository.addHypothesisInTransaction(incidentId, input),
+    );
+  }
+
+  private async addHypothesisInTransaction(
     incidentId: string,
     input: HypothesisInput,
   ): Promise<IncidentResponse | undefined> {
@@ -241,13 +291,24 @@ export class IncidentRepository {
     hypothesisId: string,
     input: HypothesisConfidenceAdjustmentInput,
   ): Promise<IncidentResponse | undefined> {
+    return this.withTransaction((repository) =>
+      repository.adjustHypothesisConfidenceInTransaction(incidentId, hypothesisId, input),
+    );
+  }
+
+  private async adjustHypothesisConfidenceInTransaction(
+    incidentId: string,
+    hypothesisId: string,
+    input: HypothesisConfidenceAdjustmentInput,
+  ): Promise<IncidentResponse | undefined> {
     const currentResult = await this.database.query<{
       confidence_score: string;
       id: string;
     }>(
       `SELECT id, confidence_score
        FROM control_plane.incident_hypotheses
-       WHERE id = $1 AND incident_id = $2`,
+       WHERE id = $1 AND incident_id = $2
+       FOR UPDATE`,
       [hypothesisId, incidentId],
     );
     const current = currentResult.rows[0];
@@ -288,6 +349,15 @@ export class IncidentRepository {
     incidentId: string,
     input: TimelineInput,
   ): Promise<IncidentResponse | undefined> {
+    return this.withTransaction((repository) =>
+      repository.addTimelineEventInTransaction(incidentId, input),
+    );
+  }
+
+  private async addTimelineEventInTransaction(
+    incidentId: string,
+    input: TimelineInput,
+  ): Promise<IncidentResponse | undefined> {
     if (!(await this.exists(incidentId))) {
       return undefined;
     }
@@ -296,25 +366,42 @@ export class IncidentRepository {
     return this.findById(incidentId);
   }
 
+  private async findByIdForUpdate(incidentId: string): Promise<IncidentResponse | undefined> {
+    const result = await this.database.query<IncidentRow>(
+      selectIncidentSql('WHERE incident.id = $1', 'FOR UPDATE OF incident'),
+      [incidentId],
+    );
+    const row = result.rows[0];
+    return row ? this.hydrate(row) : undefined;
+  }
+
   private async hydrate(row: IncidentRow): Promise<IncidentResponse> {
-    const [evidenceResult, hypothesesResult, confidenceHistoryResult, timelineResult] =
-      await Promise.all([
-        this.database.query<EvidenceRow>(
-          `SELECT id, evidence_type, title, url, description, created_at
+    return requireSingleRow(await this.hydrateMany([row]), 'Incident could not be hydrated');
+  }
+
+  private async hydrateMany(rows: IncidentRow[]): Promise<IncidentResponse[]> {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const incidentIds = rows.map((row) => row.id);
+    const evidenceResult = await this.database.query<EvidenceRow>(
+      `SELECT incident_id, id, evidence_type, title, url, description, created_at
          FROM control_plane.incident_evidences
-         WHERE incident_id = $1
-         ORDER BY created_at, id`,
-          [row.id],
-        ),
-        this.database.query<HypothesisRow>(
-          `SELECT id, statement, confidence, confidence_score, status, created_at, updated_at
+         WHERE incident_id = ANY($1::uuid[])
+         ORDER BY incident_id, created_at, id`,
+      [incidentIds],
+    );
+    const hypothesesResult = await this.database.query<HypothesisRow>(
+      `SELECT incident_id, id, statement, confidence, confidence_score, status, created_at, updated_at
          FROM control_plane.incident_hypotheses
-         WHERE incident_id = $1
-         ORDER BY created_at, id`,
-          [row.id],
-        ),
-        this.database.query<HypothesisConfidenceEventRow>(
-          `SELECT
+         WHERE incident_id = ANY($1::uuid[])
+         ORDER BY incident_id, created_at, id`,
+      [incidentIds],
+    );
+    const confidenceHistoryResult = await this.database.query<HypothesisConfidenceEventRow>(
+      `SELECT
+           confidence_event.incident_id,
            confidence_event.id,
            confidence_event.hypothesis_id,
            confidence_event.evidence_id,
@@ -327,26 +414,42 @@ export class IncidentRepository {
          FROM control_plane.incident_hypothesis_confidence_events confidence_event
          LEFT JOIN control_plane.incident_evidences evidence
            ON evidence.id = confidence_event.evidence_id
-         WHERE confidence_event.incident_id = $1
-         ORDER BY confidence_event.created_at, confidence_event.id`,
-          [row.id],
-        ),
-        this.database.query<TimelineRow>(
-          `SELECT id, event_type, title, description, occurred_at, created_at
-         FROM control_plane.incident_timeline_events
-         WHERE incident_id = $1
-         ORDER BY occurred_at, created_at, id`,
-          [row.id],
-        ),
-      ]);
-
-    return mapIncident(
-      row,
-      evidenceResult.rows,
-      hypothesesResult.rows,
-      confidenceHistoryResult.rows,
-      timelineResult.rows,
+         WHERE confidence_event.incident_id = ANY($1::uuid[])
+         ORDER BY confidence_event.incident_id, confidence_event.created_at, confidence_event.id`,
+      [incidentIds],
     );
+    const timelineResult = await this.database.query<TimelineRow>(
+      `SELECT incident_id, id, event_type, title, description, occurred_at, created_at
+         FROM control_plane.incident_timeline_events
+         WHERE incident_id = ANY($1::uuid[])
+         ORDER BY incident_id, occurred_at, created_at, id`,
+      [incidentIds],
+    );
+
+    const evidenceByIncident = groupRowsByIncidentId(evidenceResult.rows);
+    const hypothesesByIncident = groupRowsByIncidentId(hypothesesResult.rows);
+    const confidenceHistoryByIncident = groupRowsByIncidentId(confidenceHistoryResult.rows);
+    const timelineByIncident = groupRowsByIncidentId(timelineResult.rows);
+
+    return rows.map((row) =>
+      mapIncident(
+        row,
+        evidenceByIncident.get(row.id) ?? [],
+        hypothesesByIncident.get(row.id) ?? [],
+        confidenceHistoryByIncident.get(row.id) ?? [],
+        timelineByIncident.get(row.id) ?? [],
+      ),
+    );
+  }
+
+  private withTransaction<Result>(
+    work: (repository: IncidentRepository) => Promise<Result>,
+  ): Promise<Result> {
+    if (!this.database.transaction) {
+      return work(this);
+    }
+
+    return this.database.transaction((transaction) => work(new IncidentRepository(transaction)));
   }
 
   private async exists(incidentId: string): Promise<boolean> {
@@ -514,7 +617,11 @@ function selectIncidentSql(
       incident.root_cause,
       incident.preventive_actions,
       incident.created_at,
+      to_char(incident.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        AS created_at_cursor,
       incident.updated_at,
+      to_char(incident.detected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+        AS detected_at_cursor,
       project.slug AS project_slug,
       project.name AS project_name,
       service.slug AS service_slug,
@@ -530,8 +637,8 @@ function selectIncidentSql(
 
 function encodeIncidentListCursor(row: IncidentRow): string {
   const cursor: IncidentListCursor = {
-    createdAt: row.created_at.toISOString(),
-    detectedAt: row.detected_at.toISOString(),
+    createdAt: row.created_at_cursor,
+    detectedAt: row.detected_at_cursor,
     id: row.id,
   };
 
@@ -545,7 +652,13 @@ function mapIncident(
   confidenceHistoryRows: HypothesisConfidenceEventRow[],
   timelineRows: TimelineRow[],
 ): IncidentResponse {
-  const hypotheses = hypothesisRows.map((row) => mapHypothesis(row, confidenceHistoryRows));
+  const confidenceHistoryByHypothesis = groupRowsBy(
+    confidenceHistoryRows,
+    (history) => history.hypothesis_id,
+  );
+  const hypotheses = hypothesisRows.map((row) =>
+    mapHypothesis(row, confidenceHistoryByHypothesis.get(row.id) ?? []),
+  );
 
   return {
     createdAt: row.created_at.toISOString(),
@@ -605,9 +718,7 @@ function mapHypothesis(
 ): IncidentResponse['hypotheses'][number] {
   return {
     confidence: row.confidence,
-    confidenceHistory: confidenceHistoryRows
-      .filter((history) => history.hypothesis_id === row.id)
-      .map(mapHypothesisConfidenceEvent),
+    confidenceHistory: confidenceHistoryRows.map(mapHypothesisConfidenceEvent),
     confidenceScore: Number(row.confidence_score),
     createdAt: row.created_at.toISOString(),
     id: row.id,
@@ -657,4 +768,28 @@ function requireSingleRow<Row>(rows: Row[], message: string): Row {
   }
 
   return row;
+}
+
+function groupRowsByIncidentId<Row extends { incident_id: string }>(
+  rows: Row[],
+): Map<string, Row[]> {
+  return groupRowsBy(rows, (row) => row.incident_id);
+}
+
+function groupRowsBy<Row>(rows: Row[], getKey: (row: Row) => string): Map<string, Row[]> {
+  const grouped = new Map<string, Row[]>();
+
+  for (const row of rows) {
+    const key = getKey(row);
+    const existing = grouped.get(key);
+
+    if (existing) {
+      existing.push(row);
+      continue;
+    }
+
+    grouped.set(key, [row]);
+  }
+
+  return grouped;
 }

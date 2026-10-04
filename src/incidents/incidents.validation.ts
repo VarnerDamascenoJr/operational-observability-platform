@@ -174,8 +174,8 @@ function parseIncidentListCursor(value: unknown): IncidentListCursor {
     const cursor = requireRecord(decoded, 'cursor must be a valid incident list cursor');
 
     return {
-      createdAt: requiredIsoDate(cursor.createdAt, 'cursor.createdAt'),
-      detectedAt: requiredIsoDate(cursor.detectedAt, 'cursor.detectedAt'),
+      createdAt: requiredCursorTimestamp(cursor.createdAt, 'cursor.createdAt'),
+      detectedAt: requiredCursorTimestamp(cursor.detectedAt, 'cursor.detectedAt'),
       id: requiredUuid(cursor.id, 'cursor.id'),
     };
   } catch (error) {
@@ -185,6 +185,16 @@ function parseIncidentListCursor(value: unknown): IncidentListCursor {
 
     throw new ValidationError('cursor must be a valid incident list cursor');
   }
+}
+
+function requiredCursorTimestamp(value: unknown, field: string): string {
+  const timestamp = requiredString(value, field);
+
+  if (!cursorTimestampPattern.test(timestamp) || !Number.isFinite(Date.parse(timestamp))) {
+    throw new ValidationError(`${field} must be a valid ISO date`);
+  }
+
+  return timestamp;
 }
 
 function optionalUrl(value: unknown, field: string): string | undefined {
@@ -206,6 +216,8 @@ function optionalUrl(value: unknown, field: string): string | undefined {
 
   return url;
 }
+
+const cursorTimestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
 function requiredConfidenceDelta(value: unknown, field: string): number {
   const delta = requiredNumber(value, field);
