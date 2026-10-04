@@ -505,6 +505,53 @@ test('incident API preserves guided investigation state from alert to resolution
     expect.arrayContaining([expect.objectContaining({ type: 'opened' })]),
   );
 
+  const notFoundIncidentResponse = await request.get(
+    '/incidents/00000000-0000-4000-8000-000000000000',
+  );
+  expect(notFoundIncidentResponse.status()).toBe(404);
+  await expect(notFoundIncidentResponse.json()).resolves.toEqual({ error: 'Incident not found' });
+
+  const createSecondIncidentResponse = await request.post('/incidents', {
+    data: {
+      project: {
+        slug: 'portfolio-observability',
+        name: 'Portfolio Observability',
+      },
+      service: {
+        slug: 'operational-observability-platform',
+        name: 'Operational Observability Platform',
+        environment: 'e2e',
+        owner: 'platform',
+      },
+      severity: 'warning',
+      summary: 'A second incident keeps the list pagination path exercised.',
+      title: 'Secondary pagination incident',
+    },
+  });
+  expect(createSecondIncidentResponse.status()).toBe(201);
+
+  const firstIncidentPageResponse = await request.get('/incidents?limit=1');
+  await expect(firstIncidentPageResponse).toBeOK();
+  const firstIncidentPage = (await firstIncidentPageResponse.json()) as {
+    incidents: Array<{ id: string }>;
+    limit: number;
+    nextCursor?: string;
+  };
+  expect(firstIncidentPage.limit).toBe(1);
+  expect(firstIncidentPage.incidents).toHaveLength(1);
+  expect(firstIncidentPage.nextCursor).toEqual(expect.any(String));
+
+  const secondIncidentPageResponse = await request.get(
+    `/incidents?limit=1&cursor=${encodeURIComponent(firstIncidentPage.nextCursor ?? '')}`,
+  );
+  await expect(secondIncidentPageResponse).toBeOK();
+  const secondIncidentPage = (await secondIncidentPageResponse.json()) as {
+    incidents: Array<{ id: string }>;
+    limit: number;
+  };
+  expect(secondIncidentPage.limit).toBe(1);
+  expect(secondIncidentPage.incidents).toHaveLength(1);
+
   const alternativeHypothesisResponse = await request.post(`/incidents/${created.id}/hypotheses`, {
     data: {
       confidence: 'low',

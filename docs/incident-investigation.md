@@ -99,6 +99,19 @@ A resposta do incidente inclui `confidenceHistory` em cada hipotese e
 `hypothesisSummary`, com a hipotese ativa mais provavel e a incerteza restante.
 Hipoteses rejeitadas ficam no historico, mas nao entram no resumo de ranking.
 
+## Listar incidentes
+
+Use `GET /incidents?limit=50` para listar incidentes em paginas, ordenados dos
+mais recentes para os mais antigos. A resposta inclui `nextCursor` quando houver
+mais registros:
+
+```bash
+curl 'http://localhost:3000/incidents?limit=50'
+curl 'http://localhost:3000/incidents?limit=50&cursor=<nextCursor>'
+```
+
+`limit` aceita valores de `1` a `100` e usa `50` por padrao.
+
 ## Encerrar
 
 Para encerrar, `rootCause` e `preventiveActions` sao obrigatorios:
