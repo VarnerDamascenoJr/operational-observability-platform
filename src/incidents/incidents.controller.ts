@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 
 import type { SqlExecutor } from '../database/postgres.js';
-import { ValidationError } from '../errors/validation-error.js';
 import { IncidentRepository } from './incidents.repository.js';
 import { IncidentService } from './incidents.service.js';
 import {
   parseCreateIncidentInput,
   parseEvidenceInput,
+  parseHypothesisConfidenceAdjustmentInput,
   parseHypothesisInput,
+  parseIncidentHypothesisIds,
   parseIncidentId,
   parseTimelineInput,
   parseUpdateIncidentInput,
@@ -23,20 +24,11 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to open incidents' };
     }
 
-    try {
-      const input = parseCreateIncidentInput(request.body);
-      const service = createIncidentService(database);
-      const incident = await service.create(input);
-      void reply.code(201);
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
-    }
+    const input = parseCreateIncidentInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.create(input);
+    void reply.code(201);
+    return incident;
   });
 
   app.get('/incidents', async (_request, reply) => {
@@ -55,25 +47,16 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to read incidents' };
     }
 
-    try {
-      const incidentId = parseIncidentId(request.params);
-      const service = createIncidentService(database);
-      const incident = await service.findById(incidentId);
+    const incidentId = parseIncidentId(request.params);
+    const service = createIncidentService(database);
+    const incident = await service.findById(incidentId);
 
-      if (!incident) {
-        void reply.code(404);
-        return { error: 'Incident not found' };
-      }
-
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident not found' };
     }
+
+    return incident;
   });
 
   app.patch('/incidents/:incidentId', async (request, reply) => {
@@ -82,26 +65,17 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to update incidents' };
     }
 
-    try {
-      const incidentId = parseIncidentId(request.params);
-      const input = parseUpdateIncidentInput(request.body);
-      const service = createIncidentService(database);
-      const incident = await service.update(incidentId, input);
+    const incidentId = parseIncidentId(request.params);
+    const input = parseUpdateIncidentInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.update(incidentId, input);
 
-      if (!incident) {
-        void reply.code(404);
-        return { error: 'Incident not found' };
-      }
-
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident not found' };
     }
+
+    return incident;
   });
 
   app.post('/incidents/:incidentId/evidence', async (request, reply) => {
@@ -110,27 +84,18 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to add incident evidence' };
     }
 
-    try {
-      const incidentId = parseIncidentId(request.params);
-      const input = parseEvidenceInput(request.body);
-      const service = createIncidentService(database);
-      const incident = await service.addEvidence(incidentId, input);
+    const incidentId = parseIncidentId(request.params);
+    const input = parseEvidenceInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.addEvidence(incidentId, input);
 
-      if (!incident) {
-        void reply.code(404);
-        return { error: 'Incident not found' };
-      }
-
-      void reply.code(201);
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident not found' };
     }
+
+    void reply.code(201);
+    return incident;
   });
 
   app.post('/incidents/:incidentId/hypotheses', async (request, reply) => {
@@ -139,27 +104,37 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to add incident hypotheses' };
     }
 
-    try {
-      const incidentId = parseIncidentId(request.params);
-      const input = parseHypothesisInput(request.body);
-      const service = createIncidentService(database);
-      const incident = await service.addHypothesis(incidentId, input);
+    const incidentId = parseIncidentId(request.params);
+    const input = parseHypothesisInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.addHypothesis(incidentId, input);
 
-      if (!incident) {
-        void reply.code(404);
-        return { error: 'Incident not found' };
-      }
-
-      void reply.code(201);
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident not found' };
     }
+
+    void reply.code(201);
+    return incident;
+  });
+
+  app.post('/incidents/:incidentId/hypotheses/:hypothesisId/confidence', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to adjust incident hypothesis confidence' };
+    }
+
+    const { hypothesisId, incidentId } = parseIncidentHypothesisIds(request.params);
+    const input = parseHypothesisConfidenceAdjustmentInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.adjustHypothesisConfidence(incidentId, hypothesisId, input);
+
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident hypothesis not found' };
+    }
+
+    return incident;
   });
 
   app.post('/incidents/:incidentId/timeline', async (request, reply) => {
@@ -168,27 +143,18 @@ export function registerIncidentRoutes(
       return { error: 'PostgreSQL is required to add incident timeline events' };
     }
 
-    try {
-      const incidentId = parseIncidentId(request.params);
-      const input = parseTimelineInput(request.body);
-      const service = createIncidentService(database);
-      const incident = await service.addTimelineEvent(incidentId, input);
+    const incidentId = parseIncidentId(request.params);
+    const input = parseTimelineInput(request.body);
+    const service = createIncidentService(database);
+    const incident = await service.addTimelineEvent(incidentId, input);
 
-      if (!incident) {
-        void reply.code(404);
-        return { error: 'Incident not found' };
-      }
-
-      void reply.code(201);
-      return incident;
-    } catch (error) {
-      if (error instanceof ValidationError) {
-        void reply.code(400);
-        return { error: error.message };
-      }
-
-      throw error;
+    if (!incident) {
+      void reply.code(404);
+      return { error: 'Incident not found' };
     }
+
+    void reply.code(201);
+    return incident;
   });
 }
 

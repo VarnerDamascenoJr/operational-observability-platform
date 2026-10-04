@@ -179,6 +179,21 @@ describe('health endpoint', () => {
   });
 });
 
+describe('validation errors', () => {
+  it('returns bad request responses from the shared validation handler', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/slos',
+      payload: {
+        name: 'Missing required fields',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ error: 'project must be an object' });
+  });
+});
+
 describe('demo transaction endpoint', () => {
   it('emits a correlated successful transaction response', async () => {
     const telemetry = new CapturingTelemetryExporter();
