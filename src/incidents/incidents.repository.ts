@@ -1,5 +1,6 @@
 import type { SqlExecutor } from '../database/postgres.js';
 import { ValidationError } from '../errors/validation-error.js';
+import { encodePaginationCursor } from '../common/pagination/pagination.validation.js';
 import {
   clampConfidenceScore,
   confidenceToScore,
@@ -15,6 +16,9 @@ import type {
   EvidenceRow,
   HypothesisInput,
   HypothesisRow,
+  IncidentListCursor,
+  IncidentListInput,
+  IncidentListResponse,
   IncidentResponse,
   IncidentRow,
   ProjectInput,
@@ -96,9 +100,46 @@ export class IncidentRepository {
     return incident;
   }
 
-  async list(): Promise<IncidentResponse[]> {
-    const result = await this.database.query<IncidentRow>(selectIncidentSql(''));
-    return Promise.all(result.rows.map((row) => this.hydrate(row)));
+  async list(input: IncidentListInput): Promise<IncidentListResponse> {
+    const parameters: unknown[] = [];
+    const whereClause = input.cursor
+      ? `WHERE (
+          incident.detected_at < $1::timestamptz
+          OR (
+            incident.detected_at = $1::timestamptz
+            AND incident.created_at < $2::timestamptz
+          )
+          OR (
+            incident.detected_at = $1::timestamptz
+            AND incident.created_at = $2::timestamptz
+            AND incident.id < $3::uuid
+          )
+        )`
+      : '';
+
+    if (input.cursor) {
+      parameters.push(input.cursor.detectedAt, input.cursor.createdAt, input.cursor.id);
+    }
+
+    parameters.push(input.limit + 1);
+
+    const result = await this.database.query<IncidentRow>(
+      selectIncidentSql(
+        whereClause,
+        `ORDER BY ${incidentListOrderSql} LIMIT $${parameters.length}`,
+      ),
+      parameters,
+    );
+    const pageRows = result.rows.slice(0, input.limit);
+    const incidents = await Promise.all(pageRows.map((row) => this.hydrate(row)));
+
+    return {
+      incidents,
+      limit: input.limit,
+      ...(result.rows.length > input.limit && pageRows.length > 0
+        ? { nextCursor: encodeIncidentListCursor(pageRows[pageRows.length - 1]) }
+        : {}),
+    };
   }
 
   async findById(incidentId: string): Promise<IncidentResponse | undefined> {
@@ -449,7 +490,13 @@ export class IncidentRepository {
   }
 }
 
-function selectIncidentSql(whereClause: string): string {
+const incidentListOrderSql =
+  'incident.detected_at DESC, incident.created_at DESC, incident.id DESC';
+
+function selectIncidentSql(
+  whereClause: string,
+  suffix = `ORDER BY ${incidentListOrderSql}`,
+): string {
   return `SELECT
       incident.id,
       incident.project_id,
@@ -478,7 +525,17 @@ function selectIncidentSql(whereClause: string): string {
     JOIN control_plane.projects project ON project.id = incident.project_id
     JOIN control_plane.services service ON service.id = incident.service_id
     ${whereClause}
-    ORDER BY incident.detected_at DESC, incident.created_at DESC`;
+    ${suffix}`;
+}
+
+function encodeIncidentListCursor(row: IncidentRow): string {
+  const cursor: IncidentListCursor = {
+    createdAt: row.created_at.toISOString(),
+    detectedAt: row.detected_at.toISOString(),
+    id: row.id,
+  };
+
+  return encodePaginationCursor(cursor);
 }
 
 function mapIncident(

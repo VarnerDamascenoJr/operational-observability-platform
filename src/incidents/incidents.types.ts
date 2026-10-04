@@ -1,5 +1,7 @@
 import type { QueryResultRow } from 'pg';
 
+import type { PaginationInput, PaginationResponse } from '../common/pagination/pagination.types.js';
+
 export type IncidentSeverity = 'critical' | 'info' | 'page' | 'warning';
 export type IncidentStatus = 'investigating' | 'mitigated' | 'open' | 'resolved';
 export type EvidenceType = 'alert' | 'dashboard' | 'log' | 'note' | 'runbook' | 'trace';
@@ -72,6 +74,14 @@ export interface UpdateIncidentInput {
   summary?: string;
   title?: string;
 }
+
+export interface IncidentListCursor {
+  createdAt: string;
+  detectedAt: string;
+  id: string;
+}
+
+export type IncidentListInput = PaginationInput<IncidentListCursor>;
 
 export interface ProjectRow extends QueryResultRow {
   id: string;
@@ -221,6 +231,10 @@ export interface IncidentResponse {
   }>;
   title: string;
   updatedAt: string;
+}
+
+export interface IncidentListResponse extends PaginationResponse {
+  incidents: IncidentResponse[];
 }
 
 export interface HypothesisConfidenceSummary {

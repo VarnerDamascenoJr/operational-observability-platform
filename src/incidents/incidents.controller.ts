@@ -10,6 +10,7 @@ import {
   parseHypothesisInput,
   parseIncidentHypothesisIds,
   parseIncidentId,
+  parseIncidentListInput,
   parseTimelineInput,
   parseUpdateIncidentInput,
 } from './incidents.validation.js';
@@ -31,14 +32,15 @@ export function registerIncidentRoutes(
     return incident;
   });
 
-  app.get('/incidents', async (_request, reply) => {
+  app.get('/incidents', async (request, reply) => {
     if (!database) {
       void reply.code(503);
       return { error: 'PostgreSQL is required to list incidents' };
     }
 
+    const input = parseIncidentListInput(request.query);
     const service = createIncidentService(database);
-    return { incidents: await service.list() };
+    return service.list(input);
   });
 
   app.get('/incidents/:incidentId', async (request, reply) => {
@@ -49,14 +51,7 @@ export function registerIncidentRoutes(
 
     const incidentId = parseIncidentId(request.params);
     const service = createIncidentService(database);
-    const incident = await service.findById(incidentId);
-
-    if (!incident) {
-      void reply.code(404);
-      return { error: 'Incident not found' };
-    }
-
-    return incident;
+    return service.findById(incidentId);
   });
 
   app.patch('/incidents/:incidentId', async (request, reply) => {

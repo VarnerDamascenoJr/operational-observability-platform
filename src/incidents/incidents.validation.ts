@@ -1,4 +1,8 @@
 import { ValidationError } from '../errors/validation-error.js';
+import {
+  decodePaginationCursor,
+  parsePaginationInput,
+} from '../common/pagination/pagination.validation.js';
 import { isNil } from '../utils/presence.js';
 import {
   optionalString,
@@ -19,6 +23,8 @@ import type {
   HypothesisConfidenceAdjustmentInput,
   HypothesisConfidence,
   HypothesisInput,
+  IncidentListCursor,
+  IncidentListInput,
   IncidentSeverity,
   IncidentStatus,
   SourceAlertInput,
@@ -71,6 +77,14 @@ export function parseUpdateIncidentInput(value: unknown): UpdateIncidentInput {
   }
 
   return input;
+}
+
+export function parseIncidentListInput(value: unknown): IncidentListInput {
+  return parsePaginationInput(value, {
+    defaultLimit: 50,
+    maximumLimit: 100,
+    parseCursor: parseIncidentListCursor,
+  });
 }
 
 export function parseEvidenceInput(value: unknown): EvidenceInput {
@@ -148,6 +162,29 @@ function parseOptionalSourceAlert(value: unknown): SourceAlertInput | undefined 
     name: requiredString(body.name, 'sourceAlert.name'),
     severity: optionalString(body.severity, 'sourceAlert.severity'),
   };
+}
+
+function parseIncidentListCursor(value: unknown): IncidentListCursor {
+  try {
+    const encodedCursor = requiredString(value, 'cursor');
+    const decoded = decodePaginationCursor(
+      encodedCursor,
+      'cursor must be a valid incident list cursor',
+    );
+    const cursor = requireRecord(decoded, 'cursor must be a valid incident list cursor');
+
+    return {
+      createdAt: requiredIsoDate(cursor.createdAt, 'cursor.createdAt'),
+      detectedAt: requiredIsoDate(cursor.detectedAt, 'cursor.detectedAt'),
+      id: requiredUuid(cursor.id, 'cursor.id'),
+    };
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+
+    throw new ValidationError('cursor must be a valid incident list cursor');
+  }
 }
 
 function optionalUrl(value: unknown, field: string): string | undefined {
