@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  analyzeObjectiveRiskForecast,
   analyzeObjectiveProcessControl,
   calculateBurnRateWindow,
   calculateObjectiveBurnRate,
   calculateSliEvaluation,
   classifyMultiWindowBurnRate,
+  overallRiskForecastSeverity,
   overallSloStatus,
   summarizeRollingWindows,
 } from './slo.calculations.js';
@@ -314,6 +316,119 @@ describe('SLO calculations', () => {
         severity: 'warning',
       }),
     );
+  });
+
+  it('forecasts next-window SLO violation risk and backtests calibration', () => {
+    const result = analyzeObjectiveRiskForecast(
+      { targetPercentage: 95, type: 'availability' },
+      processControlWindows([1, 1, 1, 8, 8, 1]),
+      {
+        baselineWindowCount: 3,
+        riskThreshold: 0.5,
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        baseline: {
+          evaluatedWindows: 3,
+          violatedWindows: 2,
+          violationRate: 0.66667,
+        },
+        latestWindowEndedAt: '2026-09-07T00:00:00.000Z',
+        nextWindowViolationProbability: 0.6,
+        riskThreshold: 0.5,
+        severity: 'elevated',
+        type: 'availability',
+      }),
+    );
+    expect(result.backtest).toEqual({
+      averagePredictedProbability: 0.4,
+      brierScore: 0.45333,
+      calibrationError: 0.26667,
+      falseNegativeCount: 2,
+      falseNegativeRate: 1,
+      falsePositiveCount: 1,
+      falsePositiveRate: 1,
+      observedViolationRate: 0.66667,
+      outcomes: [
+        expect.objectContaining({
+          actualViolation: true,
+          classification: 'false_negative',
+          predictedProbability: 0.2,
+          predictedViolation: false,
+        }),
+        expect.objectContaining({
+          actualViolation: true,
+          classification: 'false_negative',
+          predictedProbability: 0.4,
+          predictedViolation: false,
+        }),
+        expect.objectContaining({
+          actualViolation: false,
+          classification: 'false_positive',
+          predictedProbability: 0.6,
+          predictedViolation: true,
+        }),
+      ],
+      sampleSize: 3,
+      trueNegativeCount: 0,
+      truePositiveCount: 0,
+    });
+  });
+
+  it('marks risk forecast as no data when baseline history is too short', () => {
+    const result = analyzeObjectiveRiskForecast(
+      { targetPercentage: 95, type: 'latency' },
+      processControlWindows([1, 8]),
+      {
+        baselineWindowCount: 3,
+        riskThreshold: 0.5,
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        baseline: {
+          evaluatedWindows: 2,
+          violatedWindows: 1,
+          violationRate: 0.5,
+        },
+        backtest: expect.objectContaining({
+          outcomes: [],
+          sampleSize: 0,
+        }),
+        nextWindowViolationProbability: null,
+        severity: 'no_data',
+      }),
+    );
+  });
+
+  it('respects a high risk threshold before escalating forecast severity', () => {
+    const result = analyzeObjectiveRiskForecast(
+      { targetPercentage: 95, type: 'availability' },
+      processControlWindows([8, 8, 8]),
+      {
+        baselineWindowCount: 3,
+        riskThreshold: 0.9,
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        nextWindowViolationProbability: 0.8,
+        riskThreshold: 0.9,
+        severity: 'low',
+      }),
+    );
+  });
+
+  it('combines SLO risk forecast severity across objectives', () => {
+    expect(overallRiskForecastSeverity([{ severity: 'low' }, { severity: 'high' }])).toBe('high');
+    expect(overallRiskForecastSeverity([{ severity: 'low' }, { severity: 'elevated' }])).toBe(
+      'elevated',
+    );
+    expect(overallRiskForecastSeverity([])).toBe('no_data');
   });
 });
 
