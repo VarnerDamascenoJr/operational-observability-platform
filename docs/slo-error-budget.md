@@ -192,3 +192,37 @@ A resposta diferencia:
 Cada anomalia inclui um objeto `evidence` com `type: "note"`, titulo e
 descricao. Esse objeto pode ser anexado ao incidente via
 `POST /incidents/<incident-id>/evidence`.
+
+## Prever risco operacional proximo
+
+```bash
+curl 'http://localhost:3000/slos/<slo-id>/risk-forecast?limit=30&baselineWindows=6'
+```
+
+A previsao de risco usa um baseline simples antes de qualquer modelo
+sofisticado: a probabilidade da proxima janela violar o SLO e estimada pela
+frequencia suavizada de violacoes nas `baselineWindows` janelas avaliadas mais
+recentes.
+
+Parametros principais:
+
+- `limit`: quantidade maxima de janelas recentes usadas no historico;
+- `baselineWindows`: quantidade de janelas usadas em cada estimativa;
+- `riskThreshold`: probabilidade minima para classificar uma previsao como
+  violacao esperada.
+
+A resposta inclui:
+
+- `nextWindowViolationProbability`: probabilidade prevista de violacao na
+  proxima janela;
+- `severity`: `low`, `elevated`, `high` ou `no_data`;
+- `backtest`: simulacao walk-forward com probabilidades previstas para janelas
+  historicas;
+- `averagePredictedProbability`, `observedViolationRate`, `calibrationError` e
+  `brierScore`: metricas de calibracao da previsao;
+- `falsePositiveCount` e `falseNegativeCount`: previsoes incorretas registradas
+  no historico sintetico usado no backtest.
+
+Esse endpoint complementa os alertas reativos: ele responde qual e o risco de
+violacao antes da proxima janela fechar e deixa a qualidade da previsao
+avaliavel no proprio payload.
