@@ -156,6 +156,38 @@ export function parseProcessControlInput(value: unknown): {
   };
 }
 
+export function parseRiskForecastInput(value: unknown): {
+  baselineWindowCount: number;
+  limit: number;
+  riskThreshold: number;
+} {
+  const query = requireRecord(value, 'Query params must be an object');
+  const baselineWindowCount = optionalInteger(query.baselineWindows, 'baselineWindows', {
+    defaultValue: 6,
+    maximum: 60,
+    minimum: 2,
+  });
+  const limit = optionalInteger(query.limit, 'limit', {
+    defaultValue: 30,
+    maximum: 90,
+    minimum: 3,
+  });
+
+  if (limit < baselineWindowCount) {
+    throw new ValidationError('limit must be greater than or equal to baselineWindows');
+  }
+
+  return {
+    baselineWindowCount,
+    limit,
+    riskThreshold: optionalNumber(query.riskThreshold, 'riskThreshold', {
+      defaultValue: 0.5,
+      maximum: 0.99,
+      minimum: 0.01,
+    }),
+  };
+}
+
 function parseEvaluationSource(value: unknown): EvaluationSource {
   if (value === undefined) {
     return { kind: 'manual' };

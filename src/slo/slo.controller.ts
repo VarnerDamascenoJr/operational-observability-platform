@@ -7,6 +7,7 @@ import {
   parseCreateSloInput,
   parseEvaluationInput,
   parseProcessControlInput,
+  parseRiskForecastInput,
   parseRollingWindowLimit,
   parseSloId,
 } from './slo.validation.js';
@@ -121,6 +122,25 @@ export function registerSloRoutes(app: FastifyInstance, database: SqlExecutor | 
     const input = parseProcessControlInput(request.query);
     const repository = new SloRepository(database);
     const response = await repository.processControl(sloId, input);
+
+    if (!response) {
+      void reply.code(404);
+      return { error: 'SLO not found' };
+    }
+
+    return response;
+  });
+
+  app.get('/slos/:sloId/risk-forecast', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to read SLO risk forecast' };
+    }
+
+    const sloId = parseSloId(request.params);
+    const input = parseRiskForecastInput(request.query);
+    const repository = new SloRepository(database);
+    const response = await repository.riskForecast(sloId, input);
 
     if (!response) {
       void reply.code(404);
