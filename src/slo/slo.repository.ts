@@ -19,14 +19,17 @@ import type {
   SloDefinition,
   SloEvaluationResponse,
   SloProcessControlResponse,
+  SloRiskForecastResponse,
   SloRollingWindowsResponse,
   SloRow,
 } from './slo.types.js';
 import {
+  analyzeObjectiveRiskForecast,
   analyzeObjectiveProcessControl,
   calculateObjectiveBurnRate,
   calculateSliEvaluation,
   overallBurnRateSeverity,
+  overallRiskForecastSeverity,
   overallProcessControlSeverity,
   overallSloStatus,
   summarizeRollingWindows,
@@ -403,6 +406,33 @@ export class SloRepository {
       objectives,
       options,
       overallSeverity: overallProcessControlSeverity(objectives),
+      slo: rollingWindows.slo,
+    };
+  }
+
+  async riskForecast(
+    sloId: string,
+    input: { baselineWindowCount: number; limit: number; riskThreshold: number },
+  ): Promise<SloRiskForecastResponse | undefined> {
+    const rollingWindows = await this.rollingWindows(sloId, input.limit);
+
+    if (!rollingWindows) {
+      return undefined;
+    }
+
+    const options = {
+      baselineWindowCount: input.baselineWindowCount,
+      riskThreshold: input.riskThreshold,
+    };
+    const objectives = rollingWindows.objectives.map((objective) =>
+      analyzeObjectiveRiskForecast(objective, objective.windows, options),
+    );
+
+    return {
+      limit: input.limit,
+      objectives,
+      options,
+      overallSeverity: overallRiskForecastSeverity(objectives),
       slo: rollingWindows.slo,
     };
   }

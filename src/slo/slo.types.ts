@@ -6,6 +6,9 @@ export type EvaluationSourceKind = 'fixture' | 'manual' | 'prometheus';
 export type BurnRateSeverity = 'no_data' | 'ok' | 'page' | 'warning' | 'watch';
 export type ProcessControlPattern = 'isolated_spike' | 'normal' | 'sustained_shift';
 export type ProcessControlSeverity = 'no_data' | 'ok' | 'warning' | 'watch';
+export type RiskForecastClassification =
+  'false_negative' | 'false_positive' | 'true_negative' | 'true_positive';
+export type RiskForecastSeverity = 'elevated' | 'high' | 'low' | 'no_data';
 
 export interface EvaluationSource {
   kind: EvaluationSourceKind;
@@ -225,6 +228,62 @@ export interface SloProcessControlResponse {
   objectives: ProcessControlObjectiveResult[];
   options: ProcessControlOptions;
   overallSeverity: ProcessControlSeverity;
+  slo: SloDefinition;
+}
+
+export interface RiskForecastOptions {
+  baselineWindowCount: number;
+  riskThreshold: number;
+}
+
+export interface RiskForecastBaseline {
+  evaluatedWindows: number;
+  violatedWindows: number;
+  violationRate: number | null;
+}
+
+export interface RiskForecastBacktestOutcome {
+  actualViolation: boolean;
+  classification: RiskForecastClassification;
+  endedAt: string;
+  predictedProbability: number;
+  predictedViolation: boolean;
+  startedAt: string;
+}
+
+export interface RiskForecastBacktestSummary {
+  averagePredictedProbability: number | null;
+  brierScore: number | null;
+  calibrationError: number | null;
+  falseNegativeCount: number;
+  falseNegativeRate: number | null;
+  falsePositiveCount: number;
+  falsePositiveRate: number | null;
+  observedViolationRate: number | null;
+  outcomes: RiskForecastBacktestOutcome[];
+  sampleSize: number;
+  trueNegativeCount: number;
+  truePositiveCount: number;
+}
+
+export interface ObjectiveRiskForecastResult {
+  backtest: RiskForecastBacktestSummary;
+  baseline: RiskForecastBaseline;
+  interpretation: string;
+  latencyThresholdMilliseconds?: number;
+  latestWindowEndedAt: string | null;
+  nextWindowViolationProbability: number | null;
+  riskThreshold: number;
+  severity: RiskForecastSeverity;
+  targetPercentage: number;
+  type: SliType;
+}
+
+export interface SloRiskForecastResponse {
+  limit: number;
+  objectives: ObjectiveRiskForecastResult[];
+  options: RiskForecastOptions;
+  overallSeverity: RiskForecastSeverity;
   slo: SloDefinition;
 }
 

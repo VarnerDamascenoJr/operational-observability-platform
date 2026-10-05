@@ -393,6 +393,44 @@ test('SLO API configures objectives and calculates error budget state', async ({
       }),
     }),
   );
+
+  const riskForecastResponse = await request.get(
+    `/slos/${created.id}/risk-forecast?limit=4&baselineWindows=2&riskThreshold=0.5`,
+  );
+
+  await expect(riskForecastResponse).toBeOK();
+  await expect(riskForecastResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      limit: 4,
+      overallSeverity: 'high',
+      objectives: expect.arrayContaining([
+        expect.objectContaining({
+          backtest: expect.objectContaining({
+            falseNegativeCount: 1,
+            sampleSize: 2,
+            truePositiveCount: 1,
+          }),
+          nextWindowViolationProbability: 0.75,
+          severity: 'high',
+          type: 'availability',
+        }),
+        expect.objectContaining({
+          backtest: expect.objectContaining({
+            falseNegativeCount: 0,
+            sampleSize: 2,
+            truePositiveCount: 2,
+          }),
+          nextWindowViolationProbability: 0.75,
+          severity: 'high',
+          type: 'latency',
+        }),
+      ]),
+      options: {
+        baselineWindowCount: 2,
+        riskThreshold: 0.5,
+      },
+    }),
+  );
 });
 
 test('SLO API replaces removed objectives on reconfiguration', async ({ request }) => {

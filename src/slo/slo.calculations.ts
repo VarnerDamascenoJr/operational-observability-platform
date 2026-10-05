@@ -6,6 +6,11 @@ import type {
   ProcessControlObjectiveResult,
   ProcessControlOptions,
   ProcessControlSeverity,
+  ObjectiveRiskForecastResult,
+  RiskForecastBacktestOutcome,
+  RiskForecastClassification,
+  RiskForecastOptions,
+  RiskForecastSeverity,
   RollingSliSummary,
   RollingSliWindow,
   SliEvaluationResult,
@@ -381,6 +386,60 @@ export function overallProcessControlSeverity(
   );
 }
 
+export function analyzeObjectiveRiskForecast(
+  objective: Pick<SliObjective, 'latencyThresholdMilliseconds' | 'targetPercentage' | 'type'>,
+  windows: readonly RollingSliWindow[],
+  options: RiskForecastOptions,
+): ObjectiveRiskForecastResult {
+  const evaluatedWindows = windows.filter((window) => window.totalEvents > 0);
+  const baselineWindows = evaluatedWindows.slice(-options.baselineWindowCount);
+  const baseline = riskForecastBaseline(baselineWindows);
+  const enoughBaseline = baselineWindows.length >= options.baselineWindowCount;
+  const nextWindowViolationProbability = enoughBaseline
+    ? estimateViolationProbability(baselineWindows)
+    : null;
+  const severity =
+    nextWindowViolationProbability === null
+      ? 'no_data'
+      : classifyRiskForecast(nextWindowViolationProbability, options.riskThreshold);
+
+  return {
+    backtest: backtestRiskForecast(evaluatedWindows, options),
+    baseline,
+    interpretation: riskForecastInterpretation(severity),
+    ...(objective.latencyThresholdMilliseconds
+      ? { latencyThresholdMilliseconds: objective.latencyThresholdMilliseconds }
+      : {}),
+    latestWindowEndedAt: evaluatedWindows.at(-1)?.endedAt ?? null,
+    nextWindowViolationProbability,
+    riskThreshold: options.riskThreshold,
+    severity,
+    targetPercentage: objective.targetPercentage,
+    type: objective.type,
+  };
+}
+
+export function overallRiskForecastSeverity(
+  objectives: readonly Pick<ObjectiveRiskForecastResult, 'severity'>[],
+): RiskForecastSeverity {
+  const order: Record<RiskForecastSeverity, number> = {
+    no_data: 0,
+    low: 1,
+    elevated: 2,
+    high: 3,
+  };
+
+  if (objectives.length === 0) {
+    return 'no_data';
+  }
+
+  return objectives.reduce<RiskForecastSeverity>(
+    (highest, objective) =>
+      order[objective.severity] > order[highest] ? objective.severity : highest,
+    'no_data',
+  );
+}
+
 export function round(value: number, decimals: number): number {
   const factor = 10 ** decimals;
   return Math.round(value * factor) / factor;
@@ -478,6 +537,146 @@ function processControlInterpretation(severity: ProcessControlSeverity): string 
     case 'no_data':
       return 'There are not enough baseline and monitored windows to estimate statistical process control.';
   }
+}
+
+function riskForecastBaseline(windows: readonly RollingSliWindow[]) {
+  const violatedWindows = windows.filter(isViolation).length;
+
+  return {
+    evaluatedWindows: windows.length,
+    violatedWindows,
+    violationRate: windows.length === 0 ? null : round(violatedWindows / windows.length, 5),
+  };
+}
+
+function estimateViolationProbability(windows: readonly RollingSliWindow[]): number {
+  const violatedWindows = windows.filter(isViolation).length;
+
+  return round((violatedWindows + 1) / (windows.length + 2), 5);
+}
+
+function backtestRiskForecast(windows: readonly RollingSliWindow[], options: RiskForecastOptions) {
+  const outcomes: RiskForecastBacktestOutcome[] = [];
+
+  for (let index = options.baselineWindowCount; index < windows.length; index += 1) {
+    const baseline = windows.slice(index - options.baselineWindowCount, index);
+    const predictedProbability = estimateViolationProbability(baseline);
+    const predictedViolation = predictedProbability >= options.riskThreshold;
+    const actualViolation = isViolation(windows[index]);
+
+    outcomes.push({
+      actualViolation,
+      classification: riskForecastClassification(predictedViolation, actualViolation),
+      endedAt: windows[index].endedAt,
+      predictedProbability,
+      predictedViolation,
+      startedAt: windows[index].startedAt,
+    });
+  }
+
+  const sampleSize = outcomes.length;
+  const falseNegativeCount = outcomes.filter(
+    (outcome) => outcome.classification === 'false_negative',
+  ).length;
+  const falsePositiveCount = outcomes.filter(
+    (outcome) => outcome.classification === 'false_positive',
+  ).length;
+  const trueNegativeCount = outcomes.filter(
+    (outcome) => outcome.classification === 'true_negative',
+  ).length;
+  const truePositiveCount = outcomes.filter(
+    (outcome) => outcome.classification === 'true_positive',
+  ).length;
+  const averagePredictedProbability =
+    sampleSize === 0
+      ? null
+      : round(
+          outcomes.reduce((total, outcome) => total + outcome.predictedProbability, 0) / sampleSize,
+          5,
+        );
+  const observedViolationRate =
+    sampleSize === 0 ? null : round((falseNegativeCount + truePositiveCount) / sampleSize, 5);
+
+  return {
+    averagePredictedProbability,
+    brierScore:
+      sampleSize === 0
+        ? null
+        : round(
+            outcomes.reduce((total, outcome) => {
+              const observed = outcome.actualViolation ? 1 : 0;
+              return total + (outcome.predictedProbability - observed) ** 2;
+            }, 0) / sampleSize,
+            5,
+          ),
+    calibrationError:
+      averagePredictedProbability === null || observedViolationRate === null
+        ? null
+        : round(Math.abs(averagePredictedProbability - observedViolationRate), 5),
+    falseNegativeCount,
+    falseNegativeRate:
+      falseNegativeCount + truePositiveCount === 0
+        ? null
+        : round(falseNegativeCount / (falseNegativeCount + truePositiveCount), 5),
+    falsePositiveCount,
+    falsePositiveRate:
+      falsePositiveCount + trueNegativeCount === 0
+        ? null
+        : round(falsePositiveCount / (falsePositiveCount + trueNegativeCount), 5),
+    observedViolationRate,
+    outcomes,
+    sampleSize,
+    trueNegativeCount,
+    truePositiveCount,
+  };
+}
+
+function classifyRiskForecast(
+  probability: number,
+  riskThreshold: number,
+): Exclude<RiskForecastSeverity, 'no_data'> {
+  if (probability < riskThreshold) {
+    return 'low';
+  }
+
+  const highThreshold = Math.max(0.7, riskThreshold);
+  return probability >= highThreshold ? 'high' : 'elevated';
+}
+
+function riskForecastClassification(
+  predictedViolation: boolean,
+  actualViolation: boolean,
+): RiskForecastClassification {
+  if (predictedViolation && actualViolation) {
+    return 'true_positive';
+  }
+
+  if (predictedViolation && !actualViolation) {
+    return 'false_positive';
+  }
+
+  if (!predictedViolation && actualViolation) {
+    return 'false_negative';
+  }
+
+  return 'true_negative';
+}
+
+function riskForecastInterpretation(severity: RiskForecastSeverity): string {
+  switch (severity) {
+    case 'high':
+      return 'Historical windows predict a high chance of violating the SLO in the next window.';
+    case 'elevated':
+      return 'Historical windows predict an elevated chance of violating the SLO in the next window.';
+    case 'low':
+      return 'Historical windows predict a low chance of violating the SLO in the next window.';
+    case 'no_data':
+      return 'There are not enough evaluated windows to forecast the next SLO violation risk.';
+  }
+}
+
+function isViolation(window: Pick<RollingSliWindow, 'status'>): boolean {
+  return window.status === 'breached';
 }
 
 function sampleStandardDeviation(values: readonly number[]): number {
