@@ -833,3 +833,50 @@ test('incident API preserves guided investigation state from alert to resolution
     ]),
   );
 });
+
+test('Alertmanager notifications preserve the latest alert lifecycle across retries', async ({
+  request,
+}) => {
+  const fingerprint = `e2e-alert-${Date.now()}`;
+  const alert = {
+    fingerprint,
+    status: 'firing',
+    startsAt: '2026-01-01T00:00:00Z',
+    endsAt: '0001-01-01T00:00:00Z',
+    labels: { alertname: 'E2ETest', service: 'demo', environment: 'test' },
+    annotations: { summary: 'Demo alert' },
+  };
+  for (let index = 0; index < 2; index++) {
+    const response = await request.post('/alerts/webhook', { data: { alerts: [alert] } });
+    expect(response.status()).toBe(200);
+  }
+  const invalid = await request.post('/alerts/webhook', {
+    data: { alerts: [{ ...alert, status: 'bad' }] },
+  });
+  expect(invalid.status()).toBe(400);
+  let response = await request.get('/alerts?status=firing');
+  let body = await response.json();
+  expect(
+    body.alerts.filter((entry: { fingerprint: string }) => entry.fingerprint === fingerprint),
+  ).toHaveLength(1);
+  expect(
+    (
+      await request.post('/alerts/webhook', {
+        data: { alerts: [{ ...alert, status: 'resolved', endsAt: '2026-01-01T01:00:00Z' }] },
+      })
+    ).status(),
+  ).toBe(200);
+  expect((await request.post('/alerts/webhook', { data: { alerts: [alert] } })).status()).toBe(200);
+  response = await request.get('/alerts?status=resolved');
+  body = await response.json();
+  expect(
+    body.alerts.find((entry: { fingerprint: string }) => entry.fingerprint === fingerprint)?.status,
+  ).toBe('resolved');
+  const next = { ...alert, startsAt: '2026-01-02T00:00:00Z' };
+  expect((await request.post('/alerts/webhook', { data: { alerts: [next] } })).status()).toBe(200);
+  response = await request.get('/alerts?status=firing');
+  body = await response.json();
+  expect(
+    body.alerts.find((entry: { fingerprint: string }) => entry.fingerprint === fingerprint)?.status,
+  ).toBe('firing');
+});
