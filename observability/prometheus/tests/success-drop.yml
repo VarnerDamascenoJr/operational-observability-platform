@@ -1,0 +1,41 @@
+rule_files:
+  - ../rules/operational-alerts.yml
+evaluation_interval: 1m
+tests:
+  - name: success traffic drops after a sufficiently active baseline
+    interval: 1m
+    input_series:
+      - series: 'demo_transactions_total{service="demo",environment="test",outcome="success"}'
+        values: '0+60x65 3900+0x20'
+    alert_rule_test:
+      - eval_time: 1h20m
+        alertname: OOPSuccessfulTransactionsDrop
+        exp_alerts:
+          - exp_labels:
+              service: demo
+              environment: test
+              severity: warning
+              symptom: successful_transactions_drop
+              runbook: docs/symptom-alerts.md#queda-de-transacoes-bem-sucedidas
+              dashboard_uid: oop-demo-business
+            exp_annotations:
+              summary: 'Successful transactions dropped for demo'
+              description: 'The five-minute success rate fell below half of the preceding hour baseline for five minutes. Confirm demand and impact before investigating failures.'
+  - name: stable traffic does not fire
+    interval: 1m
+    input_series:
+      - series: 'demo_transactions_total{service="demo",environment="test",outcome="success"}'
+        values: '0+60x80'
+    alert_rule_test:
+      - eval_time: 1h20m
+        alertname: OOPSuccessfulTransactionsDrop
+        exp_alerts: []
+  - name: insufficient history does not fire
+    interval: 1m
+    input_series:
+      - series: 'demo_transactions_total{service="demo",environment="test",outcome="success"}'
+        values: '0+0x60 0+1x3 3+0x20'
+    alert_rule_test:
+      - eval_time: 1h20m
+        alertname: OOPSuccessfulTransactionsDrop
+        exp_alerts: []

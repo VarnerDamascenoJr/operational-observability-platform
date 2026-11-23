@@ -34,6 +34,17 @@ services:
       - default
       - sales-event-observability
 
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    command: ['--config.file=/etc/alertmanager/alertmanager.yml', '--storage.path=/alertmanager']
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - '127.0.0.1:9093:9093'
+    volumes:
+      - ./observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+
   prometheus:
     image: prom/prometheus:v3.2.1
     extra_hosts:
@@ -122,6 +133,7 @@ services:
 volumes:
   postgres_data:
   prometheus_data:
+  alertmanager_data:
   tempo_data:
   loki_data:
   grafana_data:

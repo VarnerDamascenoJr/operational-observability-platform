@@ -35,7 +35,7 @@ wait_for_url() {
 
 trap cleanup EXIT
 
-if ! docker compose up -d postgres otel-collector prometheus tempo loki grafana >/dev/null; then
+if ! docker compose up -d postgres otel-collector prometheus tempo loki grafana alertmanager >/dev/null; then
   docker compose ps
 fi
 wait_for_url 'http://localhost:13133/'
@@ -43,6 +43,7 @@ wait_for_url 'http://localhost:9090/-/ready'
 wait_for_url 'http://localhost:3200/ready'
 wait_for_url 'http://localhost:3100/ready'
 wait_for_url 'http://localhost:3001/api/health'
+wait_for_url 'http://localhost:9093/-/ready'
 npm run build >/dev/null
 database_url="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}"
 migration_succeeded=0
@@ -305,6 +306,28 @@ printf '%s' "${firing_alerts:-}" | jq --exit-status '
   ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpLatency" and .state == "firing")] | length > 0) and
   ([.data.alerts[] | select(.labels.alertname == "OOPSloErrorBudgetBurn" and .state == "firing")] | length > 0)
 ' >/dev/null
+
+# Prometheus sends its firing rules to Alertmanager, which delivers a webhook
+# to the API on port 3103. Wait for the persisted lifecycle state, not just the
+# Prometheus rule state. This smoke is intentionally restricted to that port.
+if [ "$api_port" = 3103 ]; then
+  for _ in $(seq 1 24); do
+    registered_alerts=$(curl --fail --silent --show-error "$api_base_url/alerts?status=firing")
+    if printf '%s' "$registered_alerts" | jq --exit-status '
+      any(.alerts[]; .labels.alertname == "OOPHighHttpErrorRate") and
+      any(.alerts[]; .labels.alertname == "OOPHighHttpLatency") and
+      any(.alerts[]; .labels.alertname == "OOPSloErrorBudgetBurn")
+    ' >/dev/null; then
+      break
+    fi
+    sleep 5
+  done
+  printf '%s' "${registered_alerts:-}" | jq --exit-status '
+    any(.alerts[]; .labels.alertname == "OOPHighHttpErrorRate") and
+    any(.alerts[]; .labels.alertname == "OOPHighHttpLatency") and
+    any(.alerts[]; .labels.alertname == "OOPSloErrorBudgetBurn")
+  ' >/dev/null
+fi
 
 for _ in $(seq 1 10); do
   if curl --fail --silent --show-error "http://localhost:3200/api/traces/$demo_trace_id" >/dev/null 2>&1; then
