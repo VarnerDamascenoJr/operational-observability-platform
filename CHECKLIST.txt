@@ -62,12 +62,12 @@ Como usar
 6. Alertas baseados em sintomas
 --------------------------------
 [x] Configurar regras de alerta no Prometheus.
-[ ] Configurar roteamento de alertas no Alertmanager.
+[x] Configurar roteamento de alertas no Alertmanager.
 [x] Criar alerta de aumento de erros.
 [x] Criar alerta de degradacao de latencia.
 [x] Criar alerta de consumo acelerado de error budget.
-[ ] Criar alerta de queda de transacoes bem-sucedidas.
-[ ] Registrar alertas e seus estados na API da plataforma.
+[x] Criar alerta de queda de transacoes bem-sucedidas.
+[x] Registrar alertas e seus estados na API da plataforma.
 [x] Evitar alertas duplicados para o mesmo sintoma.
 
 7. Incidentes e investigacao guiada
@@ -101,6 +101,13 @@ Como usar
 [ ] Simular falha no consumidor ou atraso na fila.
 [ ] Simular falha persistente no envio de email.
 [ ] Investigar cada cenario na plataforma de observabilidade.
+[ ] Corrigir e validar a consulta Loki de correlacao documentada para logs OTLP
+    do Sales. Em 2026-11-23, `| json` produziu `JSONParserErr` porque o corpo
+    das mensagens era texto; filtrar `correlation_id` como metadado retornou
+    registros da API e do worker sem erro. Aceite: atualizar os roteiros
+    afetados e comprovar a consulta com uma venda rastreada e logs reais.
+    Evidencias locais: ../evidence/overall-e2e-2026-11-23/
+    sales-loki-json-parser.json e sales-loki-structured.json.
 
 10. Entrega de portfolio
 ------------------------
