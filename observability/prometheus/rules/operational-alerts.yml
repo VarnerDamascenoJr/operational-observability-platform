@@ -62,3 +62,24 @@ groups:
         annotations:
           summary: 'SLO error budget burn is too fast for {{ $labels.slo }} {{ $labels.sli_type }}'
           description: 'The short and long SLO windows are burning error budget above the multi-window threshold for service={{ $labels.service }}, environment={{ $labels.environment }}, slo={{ $labels.slo }}, sli={{ $labels.sli_type }}. Use the business dashboard to confirm impact and then inspect traces/logs for the affected window.'
+
+      - alert: OOPSuccessfulTransactionsDrop
+        expr: |
+          (
+            sum by (service, environment) (rate(demo_transactions_total{outcome="success"}[5m]))
+            or on (service, environment)
+            0 * sum by (service, environment) (rate(demo_transactions_total[5m]))
+          )
+          < on (service, environment)
+          0.5 * (sum by (service, environment) (increase(demo_transactions_total{outcome="success"}[1h] offset 5m)) / 3600)
+          and on (service, environment)
+          sum by (service, environment) (increase(demo_transactions_total{outcome="success"}[1h] offset 5m)) >= 10
+        for: 5m
+        labels:
+          severity: warning
+          symptom: successful_transactions_drop
+          runbook: docs/symptom-alerts.md#queda-de-transacoes-bem-sucedidas
+          dashboard_uid: oop-demo-business
+        annotations:
+          summary: 'Successful transactions dropped for {{ $labels.service }}'
+          description: 'The five-minute success rate fell below half of the preceding hour baseline for five minutes. Confirm demand and impact before investigating failures.'
