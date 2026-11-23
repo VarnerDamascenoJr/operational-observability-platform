@@ -2,6 +2,8 @@ import helmet from '@fastify/helmet';
 import sensible from '@fastify/sensible';
 import Fastify, { LogController } from 'fastify';
 
+import { registerAlertRoutes } from './alerts/alerts.controller.js';
+
 import type { BuildAppOptions } from './app.types.js';
 import { loadServiceIdentity } from './config/service.js';
 import { registerDemoRoutes } from './demo/demo.controller.js';
@@ -64,6 +66,7 @@ export function buildApp(options: BuildAppOptions = {}) {
     });
   }
 
+  registerAlertRoutes(app, options.database);
   registerHealthRoutes(app, options.database);
   registerMetricsRoutes(app, { database: options.database, metrics });
   registerSloRoutes(app, options.database);
