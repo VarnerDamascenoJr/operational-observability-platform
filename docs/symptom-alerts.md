@@ -119,3 +119,42 @@ Primeira acao:
    incidente ativo.
 3. Cruzar a janela anomalas com dashboards, traces e logs antes de apontar causa
    raiz.
+
+## Queda de transacoes bem-sucedidas
+
+Alerta: `OOPSuccessfulTransactionsDrop` (`warning`). A taxa de sucessos nos
+ultimos cinco minutos fica abaixo de metade da taxa da hora anterior durante
+cinco minutos. A comparacao so existe com pelo menos dez sucessos na hora de
+referencia. Esta e uma regra de demonstracao: uma queda de demanda normal pode
+dispara-la e a ausencia de metricas deve ser investigada separadamente. Ajuste
+janelas, volume minimo e limiar ao historico e ao servico antes de usa-la fora
+do ambiente local.
+
+1. Confirmar no dashboard de transacoes se houve queda de demanda ou aumento de
+   falhas; nao presumir indisponibilidade apenas pela queda de volume.
+2. Investigar o servico, os traces e os logs da janela afetada.
+
+## Roteamento e estados locais
+
+Prometheus envia as regras ao Alertmanager, que agrupa por nome, servico e
+ambiente e envia notificacoes e resolucoes para a API. A configuracao de
+recebedor e local e nao envia notificacoes a pessoas. O Alertmanager usa
+`http://host.docker.internal:3103/alerts/webhook`; execute a API no host com
+`HOST=0.0.0.0 PORT=3103 npm run start` apos subir o banco, aplicar migrations e
+fazer o build. Para outra porta, ajuste explicitamente o arquivo de
+configuracao do Alertmanager. O Prometheus tambem coleta a API na porta 3103.
+O endpoint nao tem autenticacao e destina-se somente a redes locais confiaveis.
+
+`GET /alerts` retorna ate 1000 alertas, ordenados pela ultima atualizacao;
+`GET /alerts?status=firing` ou `?status=resolved` filtra o estado. Cada
+fingerprint identifica o estado mais recente, nao um historico completo.
+Reenvios sao idempotentes, uma resolucao nao e revertida por uma notificacao
+atrasada da mesma ocorrencia e uma ocorrencia com inicio mais recente reabre o
+alerta. Se a API ou o banco estiver indisponivel, o webhook retorna erro e o
+Alertmanager tenta novamente. O armazenamento do Alertmanager fica no volume
+local; a persistencia dos estados da API fica no PostgreSQL.
+
+Para validar a configuracao, a expressao e a entrega real, execute
+`npm run validate:observability` e `npm run smoke:observability` com a API de
+smoke na porta padrao 3103. Os limites sao demonstrativos e a configuracao nao
+substitui roteamento de producao nem escalacao de incidentes.
