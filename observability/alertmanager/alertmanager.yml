@@ -1,0 +1,13 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: platform-api
+  group_by: ['alertname', 'service', 'environment']
+  group_wait: 5s
+  group_interval: 30s
+  repeat_interval: 4h
+receivers:
+  - name: platform-api
+    webhook_configs:
+      - url: http://host.docker.internal:3103/alerts/webhook
+        send_resolved: true
