@@ -60,6 +60,10 @@ As regras Prometheus de alerta baseadas em sintomas cobrem erro HTTP alto,
 latencia HTTP alta e consumo de error budget. O runbook local esta em
 [`docs/symptom-alerts.md`](docs/symptom-alerts.md).
 
+A API registra os estados recebidos do Alertmanager e permite consulta por
+`GET /alerts`. O roteamento local, a porta de webhook e os limites da regra de
+queda de transacoes estao em [`docs/symptom-alerts.md`](docs/symptom-alerts.md).
+
 A API de incidentes permite abrir, investigar e encerrar incidentes associados a
 servico, alerta e SLO. Ela preserva evidencias, hipoteses e linha do tempo da
 resposta. Consulte [`docs/incident-investigation.md`](docs/incident-investigation.md).
@@ -82,6 +86,7 @@ em arquivos ja aplicados.
 | ------------------- | ----------------------- | -------------------------------- |
 | Grafana             | http://localhost:3001   | Explore, dashboards e correlacao |
 | Prometheus          | http://localhost:9090   | Metricas e regras de alerta      |
+| Alertmanager        | http://localhost:9093   | Roteamento local de alertas      |
 | Tempo               | http://localhost:3200   | Traces distribuidos              |
 | Loki                | http://localhost:3100   | Logs estruturados                |
 | Collector OTLP gRPC | `localhost:4317`        | Ingestao de telemetria           |
