@@ -14,7 +14,7 @@
     },
     {
       "title": "Abrir logs por correlacao no Loki",
-      "url": "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bservice_name%3D~%5C%22sales-event-api%7Csales-event-worker%7Csales-event-email-retry-worker%5C%22%7D%20%7C%20json%20%7C%20correlation_id%3D%5C%22%24correlation_id%5C%22%22%7D%5D%7D",
+      "url": "/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22expr%22:%22%7Bservice_name%3D~%5C%22sales-event-api%7Csales-event-worker%7Csales-event-email-retry-worker%5C%22%7D%20%7C%20correlation_id%3D%5C%22%24correlation_id%5C%22%22%7D%5D%7D",
       "targetBlank": false
     },
     {

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -Eeuo pipefail
+
+source "$(dirname "$0")/lib/wait-for-prometheus.sh"
+trap 'printf "Smoke failed at line %s (exit %s).\n" "$LINENO" "$?" >&2' ERR
 
 trace_id='abcdefabcdefabcdefabcdefabcdefab'
 span_id='abcdefabcdefabcd'
@@ -166,23 +169,8 @@ curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/d
 curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/dashboards/uid/oop-optiflow-execution |
   jq --exit-status '.dashboard.title == "Operational Observability - OptiFlow Execution"' >/dev/null
 
-curl --fail --silent --show-error --get \
-  --data-urlencode 'query=up{job="otel-collector"}' \
-  http://localhost:9090/api/v1/query |
-  jq --exit-status '.data.result[] | select(.value[1] == "1")' >/dev/null
-
-for _ in $(seq 1 10); do
-  api_target_count=$(curl --fail --silent --show-error --get \
-    --data-urlencode 'query=up{job="observability-api"}' \
-    http://localhost:9090/api/v1/query |
-    jq '[.data.result[] | select(.value[1] == "1")] | length')
-  if [ "$api_target_count" -gt 0 ]; then
-    break
-  fi
-  sleep 3
-done
-
-test "${api_target_count:-0}" -gt 0
+wait_for_prometheus_target otel-collector
+wait_for_prometheus_target observability-api
 
 curl --fail --silent --show-error \
   --header 'Content-Type: application/json' \
