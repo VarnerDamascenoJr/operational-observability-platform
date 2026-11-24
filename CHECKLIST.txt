@@ -101,13 +101,14 @@ Como usar
 [ ] Simular falha no consumidor ou atraso na fila.
 [ ] Simular falha persistente no envio de email.
 [ ] Investigar cada cenario na plataforma de observabilidade.
-[ ] Corrigir e validar a consulta Loki de correlacao documentada para logs OTLP
+[x] Corrigir e validar a consulta Loki de correlacao documentada para logs OTLP
     do Sales. Em 2026-11-23, `| json` produziu `JSONParserErr` porque o corpo
     das mensagens era texto; filtrar `correlation_id` como metadado retornou
     registros da API e do worker sem erro. Aceite: atualizar os roteiros
     afetados e comprovar a consulta com uma venda rastreada e logs reais.
-    Evidencias locais: ../evidence/overall-e2e-2026-11-23/
-    sales-loki-json-parser.json e sales-loki-structured.json.
+    Validado em 2026-11-24 com venda rastreada, logs reais da API e worker,
+    reserva processada e dashboard provisionado. Evidencias locais:
+    ../evidence/sales-loki-fix-2026-11-24/validation.log e loki-response.json.
 
 10. Entrega de portfolio
 ------------------------
