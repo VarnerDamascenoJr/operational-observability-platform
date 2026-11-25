@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SqlExecutor } from '../database/postgres.js';
 import { IncidentRepository } from './incidents.repository.js';
 import { IncidentService } from './incidents.service.js';
+import { suggestInvestigation } from './incidents.suggestions.js';
 import {
   parseCreateIncidentInput,
   parseEvidenceInput,
@@ -52,6 +53,17 @@ export function registerIncidentRoutes(
     const incidentId = parseIncidentId(request.params);
     const service = createIncidentService(database);
     return service.findById(incidentId);
+  });
+
+  app.get('/incidents/:incidentId/suggestions', async (request, reply) => {
+    if (!database) {
+      void reply.code(503);
+      return { error: 'PostgreSQL is required to suggest incident investigations' };
+    }
+
+    const incidentId = parseIncidentId(request.params);
+    const incident = await createIncidentService(database).findById(incidentId);
+    return suggestInvestigation(incident);
   });
 
   app.patch('/incidents/:incidentId', async (request, reply) => {
