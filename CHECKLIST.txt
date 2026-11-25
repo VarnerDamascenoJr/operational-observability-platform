@@ -72,12 +72,12 @@ Como usar
 
 7. Incidentes e investigacao guiada
 -----------------------------------
-[ ] Modelar incidentes, evidencias, hipoteses e linha do tempo.
-[ ] Criar API para abrir, atualizar e encerrar incidentes.
-[ ] Associar incidentes a alertas, servicos e SLOs afetados.
-[ ] Sugerir traces e logs relevantes para cada sintoma.
-[ ] Criar runbooks para erro alto, latencia alta e dependencia indisponivel.
-[ ] Registrar causa raiz e acoes preventivas apos um incidente.
+[x] Modelar incidentes, evidencias, hipoteses e linha do tempo.
+[x] Criar API para abrir, atualizar e encerrar incidentes.
+[x] Associar incidentes a alertas, servicos e SLOs afetados.
+[x] Sugerir traces e logs relevantes para cada sintoma.
+[x] Criar runbooks para erro alto, latencia alta e dependencia indisponivel.
+[x] Registrar causa raiz e acoes preventivas apos um incidente.
 
 8. Sampling e resiliencia
 -------------------------
