@@ -550,6 +550,20 @@ test('incident API preserves guided investigation state from alert to resolution
   expect(sloResponse.status()).toBe(201);
   const slo = (await sloResponse.json()) as { id: string };
 
+  const mismatchedSloResponse = await request.post('/incidents', {
+    data: {
+      project: { slug: 'portfolio-observability', name: 'Portfolio Observability' },
+      service: { slug: 'other-service', name: 'Other Service', environment: 'e2e' },
+      severity: 'warning',
+      sloId: slo.id,
+      title: 'Incident with mismatched SLO',
+    },
+  });
+  expect(mismatchedSloResponse.status()).toBe(400);
+  await expect(mismatchedSloResponse.json()).resolves.toEqual({
+    error: 'sloId must belong to the incident service',
+  });
+
   const createIncidentResponse = await request.post('/incidents', {
     data: {
       project: {
@@ -597,13 +611,43 @@ test('incident API preserves guided investigation state from alert to resolution
     };
     id: string;
     sloId: string;
-    sourceAlert: { name: string };
+    service: { slug: string; environment: string };
+    sourceAlert: { fingerprint: string; name: string; severity: string };
     status: string;
     timeline: Array<{ type: string }>;
   };
   expect(created.status).toBe('open');
   expect(created.sloId).toBe(slo.id);
-  expect(created.sourceAlert.name).toBe('OOPSloErrorBudgetBurn');
+  expect(created.service).toEqual(
+    expect.objectContaining({ slug: 'operational-observability-platform', environment: 'e2e' }),
+  );
+  expect(created.sourceAlert).toEqual({
+    fingerprint: 'alert-fingerprint-e2e',
+    name: 'OOPSloErrorBudgetBurn',
+    severity: 'page',
+  });
+  const suggestionsResponse = await request.get(`/incidents/${created.id}/suggestions`);
+  await expect(suggestionsResponse).toBeOK();
+  await expect(suggestionsResponse.json()).resolves.toEqual(
+    expect.objectContaining({
+      symptom: 'error_budget',
+      serviceName: 'operational-observability-platform',
+      suggestions: expect.arrayContaining([
+        expect.objectContaining({
+          source: 'tempo',
+          query: expect.stringContaining('resource.service.name'),
+        }),
+        expect.objectContaining({
+          source: 'loki',
+          query: '{service_name="operational-observability-platform"}',
+        }),
+      ]),
+    }),
+  );
+  const missingSuggestions = await request.get(
+    '/incidents/00000000-0000-4000-8000-000000000000/suggestions',
+  );
+  expect(missingSuggestions.status()).toBe(404);
   expect(created.evidence).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ title: 'OOPSloErrorBudgetBurn', type: 'alert' }),
@@ -718,6 +762,31 @@ test('incident API preserves guided investigation state from alert to resolution
     }),
   );
 
+  for (const [title, occurredAt] of [
+    ['Recovery confirmed', '2026-01-01T10:05:00.000Z'],
+    ['Impact confirmed', '2026-01-01T10:00:00.000Z'],
+  ]) {
+    const timelineResponse = await request.post(`/incidents/${created.id}/timeline`, {
+      data: { title, occurredAt, type: 'note' },
+    });
+    expect(timelineResponse.status()).toBe(201);
+  }
+  const persistedIncidentResponse = await request.get(`/incidents/${created.id}`);
+  await expect(persistedIncidentResponse).toBeOK();
+  const persistedIncident = (await persistedIncidentResponse.json()) as {
+    service: { slug: string; environment: string };
+    sloId: string;
+    sourceAlert: { fingerprint: string; name: string; severity: string };
+    timeline: Array<{ title: string; type: string }>;
+  };
+  expect(persistedIncident.sloId).toBe(slo.id);
+  expect(persistedIncident.service).toEqual(expect.objectContaining(created.service));
+  expect(persistedIncident.sourceAlert).toEqual(created.sourceAlert);
+  expect(persistedIncident.timeline.filter((event) => event.type === 'note')).toEqual([
+    expect.objectContaining({ title: 'Impact confirmed' }),
+    expect.objectContaining({ title: 'Recovery confirmed' }),
+  ]);
+
   const evidenceResponse = await request.post(`/incidents/${created.id}/evidence`, {
     data: {
       description: 'Trace shows the unavailable dependency span failing before the 503.',
@@ -803,6 +872,22 @@ test('incident API preserves guided investigation state from alert to resolution
     }),
   );
 
+  const incompleteResolution = await request.patch(`/incidents/${created.id}`, {
+    data: { status: 'resolved' },
+  });
+  expect(incompleteResolution.status()).toBe(400);
+  await expect(incompleteResolution.json()).resolves.toEqual({
+    error: 'rootCause is required when resolving an incident',
+  });
+
+  const missingPreventiveActions = await request.patch(`/incidents/${created.id}`, {
+    data: { rootCause: 'A confirmed cause', status: 'resolved' },
+  });
+  expect(missingPreventiveActions.status()).toBe(400);
+  await expect(missingPreventiveActions.json()).resolves.toEqual({
+    error: 'preventiveActions is required when resolving an incident',
+  });
+
   const resolvedResponse = await request.patch(`/incidents/${created.id}`, {
     data: {
       preventiveActions: 'Keep the dependency unavailable runbook linked from the alert.',
@@ -831,6 +916,24 @@ test('incident API preserves guided investigation state from alert to resolution
     expect.arrayContaining([
       expect.objectContaining({ title: 'Incident resolved', type: 'resolved' }),
     ]),
+  );
+
+  const reopenResponse = await request.patch(`/incidents/${created.id}`, {
+    data: { status: 'investigating' },
+  });
+  expect(reopenResponse.status()).toBe(400);
+  await expect(reopenResponse.json()).resolves.toEqual({
+    error: 'Incident cannot move from resolved to investigating',
+  });
+  const afterReopenAttempt = await request.get(`/incidents/${created.id}`);
+  await expect(afterReopenAttempt).toBeOK();
+  await expect(afterReopenAttempt.json()).resolves.toEqual(
+    expect.objectContaining({
+      status: 'resolved',
+      resolvedAt: resolved.resolvedAt,
+      rootCause: resolved.rootCause,
+      preventiveActions: resolved.preventiveActions,
+    }),
   );
 });
 
