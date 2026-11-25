@@ -34,6 +34,18 @@ Primeira acao:
 3. Copiar um `trace_id` de uma requisicao com erro.
 4. Abrir o trace no Tempo e os logs no Loki pelo mesmo `trace_id`.
 
+Resposta e recuperacao:
+
+1. Se os traces indicarem dependencia indisponivel, siga
+   [Dependencia indisponivel](#dependencia-indisponivel). Caso contrario, compare
+   o inicio das falhas com mudancas recentes e encaminhe ao responsavel pelo
+   servico; use rollback apenas quando houver procedimento autorizado.
+2. Acompanhe respostas 5xx e transacoes bem-sucedidas apos a mitigacao. A regra
+   atual de erro usa contadores acumulados desde o inicio do processo: ela pode
+   permanecer ativa mesmo apos a recuperacao e nao deve ser a unica confirmacao.
+3. Registre a evidencia, a mitigacao e a verificacao no incidente antes de
+   encerra-lo. Se o impacto persistir, acione o responsavel pelo servico.
+
 Cuidado contra duplicidade: se `OOPSloErrorBudgetBurn` tambem estiver disparado,
 trate este alerta como sintoma tecnico da rota e use o alerta de error budget
 para priorizar impacto de negocio.
@@ -62,9 +74,49 @@ Primeira acao:
 4. Abrir traces recentes no Tempo e verificar qual span concentra a duracao.
 5. Consultar logs no Loki filtrando pelo `trace_id` do trace lento.
 
+Resposta e recuperacao:
+
+1. Compare o tempo da dependencia com o tempo total do trace. Se a dependencia
+   estiver indisponivel, siga [Dependencia indisponivel](#dependencia-indisponivel);
+   se estiver lenta, envolva seu responsavel e evite aumentar timeouts ou
+   tentativas sem avaliar o impacto no servico.
+2. Apos a mitigacao, acompanhe o p95 na janela de cinco minutos, o volume de
+   requisicoes e os erros. Confirme recuperacao com trafego representativo e
+   registre a evidencia no incidente; se a degradacao persistir, escale ao
+   responsavel pelo servico.
+
 Cuidado contra duplicidade: se erro HTTP alto e latencia alta dispararem juntos,
 comece pela latencia quando a maioria das respostas ainda for 2xx; comece por
 erro quando a rota estiver falhando para usuarios.
+
+## Dependencia indisponivel
+
+Sintoma: requisicoes falham e traces apontam para uma chamada de dependencia
+com erro ou timeout. A indisponibilidade da dependencia e uma hipotese ate ser
+confirmada; erro de aplicacao ou configuracao incorreta podem parecer iguais.
+
+Diagnostico e resposta:
+
+1. Confirme o impacto no dashboard tecnico e no dashboard de transacoes. Anote
+   servico, ambiente e intervalo; nao trate a ausencia de telemetria como prova
+   de recuperacao.
+2. Abra `GET /incidents/<incident-id>/suggestions` quando houver incidente,
+   execute a consulta de traces sugerida no Tempo e consulte os logs do mesmo
+   `trace_id` no Loki. Identifique a dependencia e o erro retornado, sem expor
+   credenciais ou dados sensiveis nas evidencias.
+3. Verifique o estado da dependencia por seus meios de diagnostico autorizados
+   e acione seu responsavel. Quando houver mitigacao ou rollback documentado e
+   autorizado para o servico afetado, aplique-o; nao reinicie servicos nem
+   altere timeouts, retries ou infraestrutura apenas com base neste roteiro.
+4. Confirme a recuperacao com requisicoes representativas, queda de erros,
+   melhora do p95 e transacoes bem-sucedidas. Registre causa, mitigacao e
+   evidencias no incidente. Se o impacto persistir, escale ao responsavel.
+
+No ambiente local de demonstracao, `dependency=unavailable` provoca uma resposta
+503 controlada em `/demo/transactions`; o parametro nao testa uma dependencia
+externa real. Nao use essa simulacao em um ambiente compartilhado ou de
+producao. O exemplo completo esta em
+[Investigacao pelos dashboards locais](dashboard-investigation.md).
 
 ## Consumo acelerado de error budget
 
