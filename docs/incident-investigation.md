@@ -46,6 +46,11 @@ curl --request POST http://localhost:3000/incidents \
 `project` e `service` seguem o mesmo contrato da API de SLO. Quando `sloId` e
 informado, ele precisa pertencer ao servico do incidente.
 
+O `sourceAlert` registra nome, fingerprint e severidade informados na abertura,
+alem de criar uma evidencia de alerta. Esses campos sao um retrato do alerta:
+nao validam a existencia do fingerprint em `alert_states` e nao acompanham
+automaticamente mudancas posteriores no estado do Alertmanager.
+
 ## Investigar
 
 Use `PATCH /incidents/<incident-id>` para mover o incidente para
@@ -140,3 +145,20 @@ tempo.
 5. Mova para `investigating`, depois `mitigated` quando houver mitigacao
    aplicada.
 6. Encerre somente com causa raiz e acao preventiva registradas.
+
+## Sugestoes para investigar sintomas
+
+`GET /incidents/<incident-id>/suggestions` retorna consultas propostas para o
+Tempo e o Loki, usando o slug do servico como `service.name`. A janela sugerida
+comeca 15 minutos antes da deteccao e termina no encerramento ou no momento da
+consulta, para incidentes ativos. Confirme o nome e o ambiente do servico antes
+de executar as consultas: o filtro de servico sozinho pode incluir ambientes
+com o mesmo nome.
+
+O alerta de erro prioriza traces com status de erro; o alerta de latencia usa
+traces acima do limiar demonstrativo de 100 ms. Queima de error budget e queda
+de transacoes sugerem uma busca ampla, pois suas causas nao sao conhecidas. Se
+nao houver alerta de origem reconhecido, a API retorna buscas gerais. Ela nao
+consulta Tempo ou Loki, nem afirma que uma sugestao corresponde a evidencia
+existente; execute as consultas na janela indicada e correlacione pelos trace IDs.
+A disponibilidade depende da instrumentacao, coleta e retencao de telemetria.
