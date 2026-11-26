@@ -47,6 +47,7 @@ wait_for_url 'http://localhost:3200/ready'
 wait_for_url 'http://localhost:3100/ready'
 wait_for_url 'http://localhost:3001/api/health'
 wait_for_url 'http://localhost:9093/-/ready'
+bash scripts/test-trace-sampling.sh
 npm run build >/dev/null
 database_url="${DATABASE_URL:-postgresql://observability:observability@localhost:5432/observability}"
 migration_succeeded=0
@@ -170,6 +171,8 @@ curl --fail --silent --show-error --user admin:admin http://localhost:3001/api/d
   jq --exit-status '.dashboard.title == "Operational Observability - OptiFlow Execution"' >/dev/null
 
 wait_for_prometheus_target otel-collector
+wait_for_prometheus_target otel-collector-internal
+wait_for_prometheus_series 'otelcol_processor_tail_sampling_global_count_traces_sampled'
 wait_for_prometheus_target observability-api
 
 curl --fail --silent --show-error \
@@ -191,6 +194,7 @@ curl --fail --silent --show-error \
         "spanId": "$span_id",
         "name": "telemetry-ingestion",
         "kind": 1,
+        "status": {"code": 2},
         "startTimeUnixNano": "$start_time",
         "endTimeUnixNano": "$end_time"
       }]
@@ -249,7 +253,7 @@ test "${log_count:-0}" -gt 0
 demo_response=$(curl --fail --silent --show-error \
   --header 'x-correlation-id: smoke-demo-correlation' \
   --header 'x-transaction-id: smoke-demo-transaction' \
-  "$api_base_url/demo/transactions?delayMs=10&asyncMs=5")
+  "$api_base_url/demo/transactions?dependency=slow&asyncMs=5")
 demo_trace_id=$(printf '%s' "$demo_response" | jq --raw-output '.traceId')
 
 curl --fail --silent --show-error \
@@ -266,6 +270,10 @@ failure_status=$(curl --silent --show-error \
   "$api_base_url/demo/transactions?dependency=unavailable&asyncMs=1")
 test "$failure_status" = '503'
 jq --exit-status '.status == "failed" and .traceId != null' "$failure_body" >/dev/null
+# Keep the error ratio above the rule threshold despite the slow success probes.
+failure_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  "$api_base_url/demo/transactions?dependency=unavailable&asyncMs=1")
+test "$failure_status" = '503'
 
 test "$demo_trace_id" != 'null'
 metrics_body=$(curl --fail --silent --show-error "$api_base_url/metrics")
