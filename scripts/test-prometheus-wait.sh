@@ -11,7 +11,7 @@ curl() {
   count=$((count + 1))
   printf '%s' "$count" >"$state_file"
   if ((count >= succeed_on)); then
-    printf '%s' '{"status":"success","data":{"result":[{"value":[123,"1"]}]}}'
+    printf '{"status":"success","data":{"result":[{"value":[123,"%s"]}]}}' "${sample_value:-1}"
   else
     printf '%s' '{"status":"success","data":{"result":[]}}'
   fi
@@ -30,4 +30,17 @@ if PROMETHEUS_WAIT_ATTEMPTS=3 wait_for_prometheus_target otel-collector >/dev/nu
   exit 1
 fi
 [ "$(cat "$state_file")" = 3 ]
-echo 'Prometheus target wait tests passed.'
+
+printf 0 >"$state_file"
+succeed_on=3
+sample_value=0 PROMETHEUS_WAIT_ATTEMPTS=3 wait_for_prometheus_series 'sampling_metric' >/dev/null
+[ "$(cat "$state_file")" = 3 ]
+
+printf 0 >"$state_file"
+succeed_on=4
+if PROMETHEUS_WAIT_ATTEMPTS=3 wait_for_prometheus_series 'sampling_metric' >/dev/null 2>&1; then
+  echo 'Expected timeout for an unavailable series' >&2
+  exit 1
+fi
+[ "$(cat "$state_file")" = 3 ]
+echo 'Prometheus target and series wait tests passed.'
