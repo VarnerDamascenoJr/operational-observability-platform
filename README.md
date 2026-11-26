@@ -96,6 +96,10 @@ O login local do Grafana e `admin` / `admin`. Essas credenciais sao somente
 para desenvolvimento local. Todas as portas sao vinculadas a `127.0.0.1` e nao
 ficam acessiveis por outras maquinas da rede.
 
+O Collector usa tail sampling: seleciona traces com status de erro ou duracao de
+pelo menos 500 ms e amostra 10% dos demais. As regras, limites e verificacao
+local estao em [`docs/trace-sampling.md`](docs/trace-sampling.md).
+
 O Grafana provisiona automaticamente as fontes Prometheus, Tempo e Loki e os
 dashboards `Operational Observability - Service Technical` e
 `Operational Observability - Demo Business Transactions`, alem do dashboard
