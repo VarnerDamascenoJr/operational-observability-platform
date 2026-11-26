@@ -81,10 +81,10 @@ Como usar
 
 8. Sampling e resiliencia
 -------------------------
-[ ] Definir regras de sampling no OpenTelemetry Collector.
-[ ] Manter 100% dos traces com erro.
-[ ] Manter 100% dos traces lentos.
-[ ] Amostrar trafego saudavel para controlar custo.
+[x] Definir regras de sampling no OpenTelemetry Collector.
+[x] Manter traces com status de erro pela politica de sampling.
+[x] Manter traces lentos pela politica de sampling.
+[x] Amostrar trafego saudavel para controlar custo.
 [ ] Criar API para consultar e alterar regras de sampling.
 [ ] Testar indisponibilidade temporaria do Collector.
 [ ] Testar indisponibilidade do PostgreSQL e comportamento esperado.
