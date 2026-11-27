@@ -3,6 +3,7 @@
 set -euo pipefail
 
 bash scripts/test-prometheus-wait.sh
+bash scripts/test-apply-sampling-policy.sh
 docker compose config --quiet
 docker compose run --rm --no-deps otel-collector validate --config=/etc/otelcol-contrib/config.yaml
 docker compose run --rm --no-deps --entrypoint=promtool prometheus check config /etc/prometheus/prometheus.yml
