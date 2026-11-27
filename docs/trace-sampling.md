@@ -26,10 +26,45 @@ Para multiplas replicas, todos os spans do mesmo trace devem chegar a mesma
 instancia do Collector. Traces precisam ter status `ERROR` instrumentado;
 um erro representado apenas como atributo ou log nao corresponde a essa regra.
 
-Para mudar a politica local, edite `observability/otel-collector/config.yaml`,
-valide com `npm run validate:observability` e recrie o Collector. Para reverter,
-remova `tail_sampling` da lista de processadores do pipeline de traces e recrie
-o Collector. Monitore o uso de memoria, os erros de exportacao e as metricas
+## API e aplicacao local
+
+`GET /sampling/policy` retorna a configuracao desejada no PostgreSQL e sua
+`revision`. Para alterar, envie todos os campos com a revisao consultada:
+
+```bash
+curl -X PUT http://localhost:3000/sampling/policy \
+  -H 'content-type: application/json' \
+  -d '{"revision":1,"latencyThresholdMs":750,"healthySamplingPercentage":20}'
+```
+
+O limiar aceita inteiros entre 1 e 3.600.000 ms; a porcentagem aceita inteiros
+de 0 a 100. A regra de erro permanece ativa. Uma revisao desatualizada recebe
+409; consulte novamente antes de tentar. A API e voltada ao ambiente local e
+nao possui autenticacao. Restrinja seu acesso em qualquer outro ambiente.
+
+A API salva apenas a configuracao desejada e retorna `application: "manual"`;
+nao informa nem confirma o estado efetivo do Collector. Para aplicar uma
+fotografia da revisao atual na stack local, com a API e a stack em execucao e
+`curl`, `jq`, `flock` e Docker Compose disponiveis:
+
+```bash
+bash scripts/apply-sampling-policy.sh
+```
+
+O comando valida uma configuracao combinada, verifica se a revisao mudou e
+recria o Collector. A recriacao interrompe a ingestao e perde traces pendentes;
+use somente no ambiente local. A configuracao e o Compose gerados ficam em
+`.local/sampling/`. O resultado informa a revisao aplicada, mas uma alteracao
+concorrente posterior pode tornar a configuracao salva diferente da ativa.
+Depois, para manter a configuracao aplicada em comandos Compose, use
+`docker compose -f docker-compose.yml -f .local/sampling/compose.json`.
+Um `docker compose up` sem o segundo arquivo restaura as regras estaticas do
+repositorio. O script nao executa atualizacoes automaticas nem detecta desvios.
+
+Para voltar as regras estaticas, execute `docker compose up -d --force-recreate
+otel-collector`. Para desabilitar o sampling, remova `tail_sampling` da lista de
+processadores do pipeline de traces e recrie o Collector. Monitore o uso de
+memoria, os erros de exportacao e as metricas
 `otelcol_processor_tail_sampling_*`; nao use traces amostrados para calcular
 volumes ou taxas de erro sem considerar o vies de selecao.
 
