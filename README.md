@@ -136,6 +136,7 @@ docker compose ps
 docker compose logs -f otel-collector prometheus tempo loki grafana
 npm run validate:observability
 npm run smoke:observability
+npm run test:collector-outage
 ```
 
 `validate:observability` verifica as configuracoes do Compose, Collector,
@@ -145,6 +146,9 @@ correlacionado no Loki, scrape do Collector e da API pelo Prometheus,
 provisionamento das fontes e dashboards no Grafana, chamadas reais ao endpoint
 `/demo/transactions`, metricas de sucesso/falha/degradacao, SLO demonstrativo e
 alertas de erro, latencia e error budget disparados.
+
+`test:collector-outage` verifica a indisponibilidade e a recuperacao do Collector
+em uma stack isolada. Consulte [`docs/collector-outage.md`](docs/collector-outage.md).
 
 ## Qualidade
 
