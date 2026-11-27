@@ -10,6 +10,7 @@ import { registerDemoRoutes } from './demo/demo.controller.js';
 import { registerHealthRoutes } from './health/health.controller.js';
 import { getCorrelationContext } from './observability/correlation.js';
 import { registerIncidentRoutes } from './incidents/incidents.controller.js';
+import { registerSamplingRoutes } from './sampling/sampling.controller.js';
 import { registerMetricsRoutes } from './observability/metrics.controller.js';
 import { HttpMetrics } from './observability/metrics.js';
 import { registerObservabilityHooks } from './observability/observability.hooks.js';
@@ -70,6 +71,7 @@ export function buildApp(options: BuildAppOptions = {}) {
   registerHealthRoutes(app, options.database);
   registerMetricsRoutes(app, { database: options.database, metrics });
   registerSloRoutes(app, options.database);
+  registerSamplingRoutes(app, options.database);
   registerIncidentRoutes(app, options.database);
   registerDemoRoutes(app, { metrics, telemetry });
 
