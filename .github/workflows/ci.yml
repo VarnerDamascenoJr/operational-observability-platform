@@ -30,6 +30,9 @@ jobs:
       - name: Run quality checks
         run: npm run check
 
+      - name: Test PostgreSQL outage and recovery
+        run: npm run test:postgres-outage
+
       - name: Validate observability configuration
         run: npm run validate:observability
 
