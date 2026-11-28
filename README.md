@@ -167,6 +167,9 @@ validar a API compilada e em execucao, incluindo o fluxo HTTP real e o health
 check com PostgreSQL disponivel. O comando `npm run test:e2e` sobe o servico
 `postgres` do Docker Compose e aplica migrations antes de iniciar a API.
 
+`npm run test:postgres-outage` verifica a queda e recuperacao do banco em uma
+stack isolada. Veja [`docs/postgres-outage.md`](docs/postgres-outage.md).
+
 ## Proximo marco
 
 Conectar traces reais do `sales-event-project` na plataforma e iniciar a

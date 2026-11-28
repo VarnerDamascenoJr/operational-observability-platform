@@ -13,7 +13,14 @@ if (existsSync('.env')) {
   loadEnvFile('.env');
 }
 
-const database = new PostgresDatabase(loadDatabaseConfig());
+// The pool does not connect until after app has been constructed.
+const database = new PostgresDatabase(loadDatabaseConfig(), (error) => {
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : undefined;
+  app.log.warn(
+    { error_code: code && /^[A-Z0-9]{5}$/.test(code) ? code : undefined },
+    'PostgreSQL idle connection failed',
+  );
+});
 const identity = loadServiceIdentity();
 const app = buildApp({
   closeDatabase: () => database.close(),
