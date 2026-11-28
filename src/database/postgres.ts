@@ -56,7 +56,10 @@ async function runTransaction<Result>(
 export class PostgresDatabase implements SqlExecutor, ConnectionProvider {
   private readonly pool: pg.Pool;
 
-  constructor(config: DatabaseConfig) {
+  constructor(
+    config: DatabaseConfig,
+    onIdleError: (error: Error) => void = () => console.error('PostgreSQL idle connection failed'),
+  ) {
     this.pool = new Pool({
       connectionString: config.connectionString,
       max: config.maxConnections,
@@ -64,6 +67,8 @@ export class PostgresDatabase implements SqlExecutor, ConnectionProvider {
       idleTimeoutMillis: config.idleTimeoutMilliseconds,
       application_name: 'operational-observability-platform',
     });
+    // pg emits errors from idle clients on the pool; without a listener Node exits.
+    this.pool.on('error', (error: Error) => onIdleError(error));
   }
 
   query<Row extends QueryResultRow = QueryResultRow>(
