@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: outage_test
+      POSTGRES_USER: outage_test
+      POSTGRES_PASSWORD: outage_test
+    ports:
+      - '127.0.0.1:${OUTAGE_POSTGRES_PORT:?}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U outage_test -d outage_test']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres_data:
