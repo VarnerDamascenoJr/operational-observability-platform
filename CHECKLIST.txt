@@ -87,7 +87,7 @@ Como usar
 [x] Amostrar trafego saudavel para controlar custo.
 [x] Criar API para consultar e alterar regras de sampling.
 [x] Testar indisponibilidade temporaria do Collector.
-[ ] Testar indisponibilidade do PostgreSQL e comportamento esperado.
+[x] Testar indisponibilidade do PostgreSQL e comportamento esperado.
 [ ] Medir perda, atraso e capacidade de recuperacao de telemetria.
 
 9. Integracao com sales-event-project
