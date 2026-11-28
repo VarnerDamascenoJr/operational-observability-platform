@@ -44,6 +44,9 @@ jobs:
       - name: Run observability smoke test
         run: npm run smoke:observability
 
+      - name: Test Collector outage and recovery
+        run: npm run test:collector-outage
+
       - name: Print service logs on failure
         if: failure()
         run: docker compose logs --no-color
