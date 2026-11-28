@@ -24,6 +24,7 @@
     "test:collector-outage": "bash scripts/test-collector-outage.sh",
     "test:all": "npm run test:unit && npm run test:e2e",
     "check": "npm run lint && npm run format && npm run test:all && npm run build",
+    "test:postgres-outage": "bash scripts/test-postgres-outage.sh",
     "validate:observability": "bash scripts/validate-observability.sh",
     "smoke:observability": "bash scripts/smoke-observability.sh"
   },
