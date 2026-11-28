@@ -174,6 +174,9 @@ wait_for_prometheus_target otel-collector
 wait_for_prometheus_target otel-collector-internal
 wait_for_prometheus_series 'otelcol_processor_tail_sampling_global_count_traces_sampled'
 wait_for_prometheus_target observability-api
+# The latency rule uses rate(): the first slow request must be scraped before
+# generating more slow traffic, otherwise all requests may precede its baseline.
+wait_for_prometheus_series 'http_request_duration_seconds_count{job="observability-api",route="/demo/transactions",status="200"}'
 
 curl --fail --silent --show-error \
   --header 'Content-Type: application/json' \
@@ -297,11 +300,14 @@ for _ in $(seq 1 16); do
   sleep 5
 done
 
-printf '%s' "${firing_alerts:-}" | jq --exit-status '
+if ! printf '%s' "${firing_alerts:-}" | jq --exit-status '
   ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpErrorRate" and .state == "firing")] | length > 0) and
   ([.data.alerts[] | select(.labels.alertname == "OOPHighHttpLatency" and .state == "firing")] | length > 0) and
   ([.data.alerts[] | select(.labels.alertname == "OOPSloErrorBudgetBurn" and .state == "firing")] | length > 0)
-' >/dev/null
+' >/dev/null; then
+  printf 'Expected alerts did not all fire. Prometheus response: %s\n' "${firing_alerts:-<empty>}" >&2
+  exit 1
+fi
 
 # Prometheus sends its firing rules to Alertmanager, which delivers a webhook
 # to the API on port 3103. Wait for the persisted lifecycle state, not just the
